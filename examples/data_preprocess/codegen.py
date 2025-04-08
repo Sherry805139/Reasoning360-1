@@ -527,6 +527,132 @@ def leetcode2k():
     return train_dataset, test_dataset
 
 
+def humaneval():
+    rich.print(Rule("Loading OpenAI HumanEval..."))
+    dataset = load_dataset("openai_humaneval")["test"]
+    print("HumanEval dataset:", dataset)
+    
+    def process_fn(example, idx):
+        # HumanEval's prompt already contains the function signature and docstring
+        # We need to emphasize that the solution should be complete and runnable
+        prompt = (
+            "Write a complete, self-contained Python solution to the following problem. "
+            "Your solution must include all necessary imports and the full function definition including "
+            "the signature exactly as specified. Do not modify the function signature or docstring.\n\n"
+            f"```python\n{example['prompt'].strip()}\n```"
+        )
+        
+        # For HumanEval, test cases are provided in 'test' field
+        test_code = example['test']
+        
+        return {
+            "data_source": "code",
+            "prompt": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "ability": "coding",
+            "reward_model": {
+                "style": "rule",
+                "ground_truth": json.dumps(
+                    {"functional": f"{test_code}\n\ncheck({example['entry_point']})"}
+                ),
+            },
+            "extra_info": {
+                "split": "test",
+                "index": idx,
+                "reference": example["canonical_solution"],
+                "prompt": prompt,
+                "dataset": "openai_humaneval",
+                "task_id": example["task_id"],
+            },
+        }
+    
+    test_dataset = dataset.map(
+        function=process_fn, 
+        with_indices=True,
+    )
+    
+    # Return empty train dataset and full test dataset
+    empty_train = datasets.Dataset.from_dict({
+        "data_source": [],
+        "prompt": [],
+        "ability": [],
+        "reward_model": [],
+        "extra_info": []
+    }) if len(test_dataset) > 0 else datasets.Dataset.from_dict({})
+    
+    print(f"HumanEval test set: {test_dataset}")
+    return empty_train, test_dataset
+
+def mbpp():
+    rich.print(Rule("Loading MBPP dataset..."))
+    dataset = load_dataset("google-research-datasets/mbpp")
+    
+    def make_map_fn(split):
+        def process_fn(example, idx):
+            # Create a prompt that requests a complete function to solve the task
+            prompt = (
+                f"{example['text']}\n\n"
+                f"Your solution should be a complete, self-contained function in a markdown code block. "
+                f"Make sure your solution passes the following test cases:\n"
+            )
+            
+            test_code = ""
+            if example.get('test_setup_code'):
+                test_code += example['test_setup_code'] + "\n\n"
+            
+            # add all test assertions directly
+            for assertion in example['test_list'] + example.get('challenge_test_list', []):
+                test_code += assertion + "\n"
+            
+            # add the test cases to the prompt
+            prompt += f"```python\n{test_code}```"
+            
+            # add an instruction to not include the test cases in the solution
+            prompt += "\n\nPlease do not include the test cases in your solution."
+            
+            return {
+                "data_source": "code",
+                "prompt": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "ability": "coding",
+                "reward_model": {
+                    "style": "rule",
+                    "ground_truth": json.dumps(
+                        {"functional": test_code}
+                    ),
+                },
+                "extra_info": {
+                    "split": split,
+                    "index": idx,
+                    "reference": example["code"],
+                    "prompt": prompt,
+                    "dataset": "mbpp",
+                    "task_id": str(example["task_id"]),
+                },
+            }
+        
+        return process_fn
+    
+    # Process train and test splits
+    train_dataset = dataset["train"].map(
+        function=make_map_fn("train"), 
+        with_indices=True,
+    )
+    
+    test_dataset = dataset["test"].map(
+        function=make_map_fn("test"), 
+        with_indices=True,
+    )
+    
+    print(f"MBPP train set: {train_dataset}")
+    print(f"MBPP test set: {test_dataset}")
+    return train_dataset, test_dataset
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -548,6 +674,8 @@ if __name__ == "__main__":
         "kodcode": kodcode,
         "taco": taco,
         "leetcode2k": leetcode2k,
+        "humaneval": humaneval,
+        "mbpp": mbpp,
     }
     dataset_makes = [dataset_map[name] for name in dataset_names]
     names = "-".join([make.__name__ for make in dataset_makes])
