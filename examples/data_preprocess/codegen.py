@@ -534,7 +534,6 @@ def humaneval():
     
     def process_fn(example, idx):
         # HumanEval's prompt already contains the function signature and docstring
-        # We need to emphasize that the solution should be complete and runnable
         prompt = (
             "Write a complete, self-contained Python solution to the following problem. "
             "Your solution must include all necessary imports and the full function definition including "
@@ -542,8 +541,20 @@ def humaneval():
             f"```python\n{example['prompt'].strip()}\n```"
         )
         
-        # For HumanEval, test cases are provided in 'test' field
+        # Extract test code
         test_code = example['test']
+        entry_point = example['entry_point']
+        
+        # Validate that the canonical solution passes the tests
+        solution = example['canonical_solution']
+        
+        # Combine the prompt code + solution + test code to verify it works
+        full_code = f"{example['prompt']}\n{solution}\n{test_code}\n\ncheck({entry_point})"
+        
+        succ, err = code_exec(full_code)
+        if not succ:
+            print(f"Error in canonical solution for task {example['task_id']}: {err}")
+            return EMPTY_RETURN
         
         return {
             "data_source": "code",
@@ -555,13 +566,13 @@ def humaneval():
             "reward_model": {
                 "style": "rule",
                 "ground_truth": json.dumps(
-                    {"functional": f"{test_code}\n\ncheck({example['entry_point']})"}
+                    {"functional": f"{test_code}\n\ncheck({entry_point})"}
                 ),
             },
             "extra_info": {
                 "split": "test",
                 "index": idx,
-                "reference": example["canonical_solution"],
+                "reference": solution,
                 "prompt": prompt,
                 "dataset": "openai_humaneval",
                 "task_id": example["task_id"],
@@ -571,9 +582,9 @@ def humaneval():
     test_dataset = dataset.map(
         function=process_fn, 
         with_indices=True,
-    )
+    ).filter(lambda x: x != EMPTY_RETURN)
     
-    # Return empty train dataset and full test dataset
+    # Return empty train dataset and test dataset
     empty_train = datasets.Dataset.from_dict({
         "data_source": [],
         "prompt": [],
@@ -591,26 +602,34 @@ def mbpp():
     
     def make_map_fn(split):
         def process_fn(example, idx):
-            # Create a prompt that requests a complete function to solve the task
+            # Create prompt
             prompt = (
                 f"{example['text']}\n\n"
                 f"Your solution should be a complete, self-contained function in a markdown code block. "
                 f"Make sure your solution passes the following test cases:\n"
             )
             
+            # Construct test code
             test_code = ""
             if example.get('test_setup_code'):
                 test_code += example['test_setup_code'] + "\n\n"
             
-            # add all test assertions directly
+            # Add all test assertions
             for assertion in example['test_list'] + example.get('challenge_test_list', []):
                 test_code += assertion + "\n"
             
-            # add the test cases to the prompt
+            # Add test cases to prompt
             prompt += f"```python\n{test_code}```"
-            
-            # add an instruction to not include the test cases in the solution
             prompt += "\n\nPlease do not include the test cases in your solution."
+            
+            # Validate that the canonical solution passes the tests
+            solution = example['code']
+            full_code = f"{solution}\n\n{test_code}"
+            
+            succ, err = code_exec(full_code)
+            if not succ:
+                print(f"Error in canonical solution for task {example['task_id']}: {err}")
+                return EMPTY_RETURN
             
             return {
                 "data_source": "code",
@@ -628,7 +647,7 @@ def mbpp():
                 "extra_info": {
                     "split": split,
                     "index": idx,
-                    "reference": example["code"],
+                    "reference": solution,
                     "prompt": prompt,
                     "dataset": "mbpp",
                     "task_id": str(example["task_id"]),
@@ -641,12 +660,12 @@ def mbpp():
     train_dataset = dataset["train"].map(
         function=make_map_fn("train"), 
         with_indices=True,
-    )
+    ).filter(lambda x: x != EMPTY_RETURN)
     
     test_dataset = dataset["test"].map(
         function=make_map_fn("test"), 
         with_indices=True,
-    )
+    ).filter(lambda x: x != EMPTY_RETURN)
     
     print(f"MBPP train set: {train_dataset}")
     print(f"MBPP test set: {test_dataset}")
