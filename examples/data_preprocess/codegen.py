@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
 from rich.rule import Rule
+from rich.panel import Panel
 import rich
 import matplotlib.pyplot as plt
 import datasets
@@ -26,7 +27,7 @@ from examples.data_preprocess.code_utils import *
 WORKDING_DIR = os.path.join(os.environ.get("HOME"), "Reasoning360")
 
 
-def kodcode():  # Thanks!!! to Zhangchen and Yueqin
+def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
     # library requirements?
     rich.print(Rule("Loading KodCode/KodCode-V1-SFT-R1..."))
     dataset = load_dataset("KodCode/KodCode-V1-SFT-R1")
@@ -163,6 +164,7 @@ def kodcode():  # Thanks!!! to Zhangchen and Yueqin
         function=make_map_fn("train"),
         with_indices=True,
         num_proc=64,
+        load_from_cache_file=not force_recompute,
     )
     # Analyze the filter reasons
     filter_counts, filter_counts_fine_block_libs = {}, {}
@@ -219,9 +221,10 @@ def kodcode():  # Thanks!!! to Zhangchen and Yueqin
 
 
 # this dataset is super noisy and needs code execution to verify the tasks
-def taco():
+def taco(force_recompute=False):
     rich.print(Rule("Loading likaixin/TACO-verified..."))
     dataset = load_dataset("likaixin/TACO-verified")["train"]
+    
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -364,6 +367,7 @@ for i, o in zip(_inputs, _outputs):
         with_indices=True,
         num_proc=64,
         remove_columns=dataset.column_names,
+        load_from_cache_file=not force_recompute,
     ).filter(lambda x: x != EMPTY_RETURN)
     splits = dataset.train_test_split(
         test_size=max(1, min(N_TESTSET_PER_DATASET, len(dataset) * 0.1)), seed=666
@@ -446,88 +450,106 @@ for i, o in zip(_inputs, _outputs):
         function=make_map_fn("train"),
         with_indices=True,
         remove_columns=dataset.column_names,
+        load_from_cache_file=not force_recompute,
     ).filter(lambda x: x != EMPTY_RETURN)
-    test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
+    test_dataset = test_dataset.map(
+        function=make_map_fn("test"), 
+        with_indices=True,
+        load_from_cache_file=not force_recompute,
+    )
     return train_dataset, test_dataset
 
 
-def leetcode2k():
+def leetcode2k(force_recompute=False):
     rich.print(Rule("Loading LeetCodeDataset..."))
-    test_dataset = load_dataset(
-        "newfacade/LeetCodeDataset",
-        data_files="LeetCodeDataset-v2-test-problems.jsonl",
-    )["train"]
+    train_dataset = load_dataset("newfacade/LeetCodeDataset")["train"]
+    test_dataset = load_dataset("newfacade/LeetCodeDataset")["test"]
+    print("Train set:", train_dataset)
     print("Test set:", test_dataset)
 
-    train_dataset = concatenate_datasets(
-        [
-            load_dataset(
-                "newfacade/LeetCodeDataset",
-                data_files="LeetCodeDataset-v1-train-problems.jsonl",
-            )["train"],
-            load_dataset(
-                "newfacade/LeetCodeDataset",
-                data_files="LeetCodeDataset-v2-train-problems.jsonl",
-            )["train"],
-        ]
-    ).filter(
-        lambda example: example["meta"]["question_id"]
-        not in set([d["question_id"] for d in test_dataset["meta"]])
+    warning_text = (
+        "[bold yellow]⚠️ Warning: LeetCode dataset may contain mislabeled data due to unordered `set` comparison.\n"
+        "Some correct outputs might be wrongly marked incorrect.\n\n"
+        "To avoid this issue, please ensure you set [bold]PYTHONHASHSEED=0[/bold] when loading the dataset:\n"
+        "[italic green]PYTHONHASHSEED=0 python examples/data_preprocess/codegen.py --dataset_names leetcode2k[/italic green]\n\n"
+        "Also, make sure to set this consistently when running RL training.[/bold yellow]"
     )
-    print("Before deduplication - Training set:", train_dataset)
 
-    first_time_idx = []
-    seen_question_ids = set()
-    for i, example in enumerate(train_dataset):
-        if example["meta"]["question_id"] not in seen_question_ids:
-            first_time_idx.append(i)
-            seen_question_ids.add(example["meta"]["question_id"])
-    train_dataset = train_dataset.select(first_time_idx)
-
-    print("After deduplication - Training set:", train_dataset)
+    rich.print(Panel.fit(warning_text, title="[bold red]Note", border_style="yellow"))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
 
         def process_fn(example, idx):
-            prompt = f"Please solve the programming task below using a self-contained code snippet in a markdown code block.\n\n{example['meta']['query'].strip()}"
+            prefix = example["prompt"]
+            
+            prompt = example["query"]
+            # remove the "### Answer: (use the provided format with backticks)" part
+            prompt = prompt.replace("### Answer: (use the provided format with backticks)", "").strip()
+            # adjust the "### Format: " part to be more readable
+            prompt = prompt.replace("### Format: ", "### Format:\n")
+
+            # Build test code (as before)
+            test_code = f"{example['test']}\n\ncheck({example['entry_point'].strip()})"
+            # Extract the candidate solution (the original completion)
+            solution = example["completion"]
+        
+            # Combine all code pieces into a single file to execute.
+            full_code = f"{prefix}\n{solution}\n{test_code}"
+            
+            # Validate that the candidate solution passes the tests
+            # 20s timeout as some leetcode tests are slow
+            succ, err = code_exec(full_code, timeout=20)
+            
+            if not succ:
+                print("===========Test code failed for LeetCodeDataset===========")
+                print("Question:", example["meta"]["question_title"])
+                print("Error:", err)
+                # Skip the example if the test code fails
+                return EMPTY_RETURN
+
             return {
                 "data_source": "code",
                 "prompt": [
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    },
+                    {"role": "user", "content": prompt},
                 ],
                 "ability": "coding",
                 "reward_model": {
                     "style": "rule",
-                    "ground_truth": json.dumps(
-                        {
-                            "functional": f"{example['test']}\n\ncheck({example['entry_point'].strip()})"
-                        }
-                    ),
+                    "ground_truth": json.dumps({
+                        "functional": test_code
+                    }),
                 },
                 "extra_info": {
                     "split": split,
                     "index": idx,
-                    "reference": example["completion"],  # C++?
+                    "reference": solution,
                     "prompt": prompt,
+                    "prefix": prefix,
                     "dataset": "LeetCodeDataset",
                 },
             }
 
         return process_fn
 
-    train_dataset = train_dataset.map(function=make_map_fn("train"), with_indices=True)
-    test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
+    # filter out empty examples ("reward_model" is None)
+    train_dataset = train_dataset.map(
+        function=make_map_fn("train"), 
+        with_indices=True,
+        load_from_cache_file=not force_recompute,
+    ).filter(lambda x: x["reward_model"] is not None)
+    test_dataset = test_dataset.map(
+        function=make_map_fn("test"), 
+        with_indices=True,
+        load_from_cache_file=not force_recompute,
+    ).filter(lambda x: x["reward_model"] is not None)
     print(f"Leetcode2k train set: {train_dataset}")
     print(f"Leetcode2k test set: {test_dataset}")
     return train_dataset, test_dataset
 
 
-def humaneval():
+def humaneval(force_recompute=False):
     rich.print(Rule("Loading OpenAI HumanEval..."))
     dataset = load_dataset("openai_humaneval")["test"]
     print("HumanEval dataset:", dataset)
@@ -575,14 +597,15 @@ def humaneval():
                 "reference": solution,
                 "prompt": prompt,
                 "dataset": "openai_humaneval",
-                "task_id": example["task_id"],
+                "task_id": str(example["task_id"]),
             },
         }
     
     test_dataset = dataset.map(
         function=process_fn, 
         with_indices=True,
-    ).filter(lambda x: x != EMPTY_RETURN)
+        load_from_cache_file=not force_recompute,
+    ).filter(lambda x: x["reward_model"] is not None)
     
     # Return empty train dataset and test dataset
     empty_train = datasets.Dataset.from_dict({
@@ -596,12 +619,15 @@ def humaneval():
     print(f"HumanEval test set: {test_dataset}")
     return empty_train, test_dataset
 
-def mbpp():
+def mbpp(force_recompute=False):
     rich.print(Rule("Loading MBPP dataset..."))
     dataset = load_dataset("google-research-datasets/mbpp")
     
     def make_map_fn(split):
         def process_fn(example, idx):
+            # rewrite the task_id as it is int
+            example["task_id"] = "MBPP/" + str(example["task_id"])
+            
             # Create prompt
             prompt = (
                 f"{example['text']}\n\n"
@@ -660,12 +686,14 @@ def mbpp():
     train_dataset = dataset["train"].map(
         function=make_map_fn("train"), 
         with_indices=True,
-    ).filter(lambda x: x != EMPTY_RETURN)
+        load_from_cache_file=not force_recompute,
+    ).filter(lambda x: x['reward_model'] is not None)
     
     test_dataset = dataset["test"].map(
         function=make_map_fn("test"), 
         with_indices=True,
-    ).filter(lambda x: x != EMPTY_RETURN)
+        load_from_cache_file=not force_recompute,
+    ).filter(lambda x: x['reward_model'] is not None)
     
     print(f"MBPP train set: {train_dataset}")
     print(f"MBPP test set: {test_dataset}")
@@ -680,11 +708,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_names", default="kodcode", help="comma separated dataset names"
     )
+    parser.add_argument(
+        "--force_recompute", action="store_true", help="force recompute all map operations, ignoring cache"
+    )
 
     args = parser.parse_args()
 
     root_dir = args.root_dir
     dataset_names = args.dataset_names.split(",")
+    force_recompute = args.force_recompute
 
     train_datasets = []
     test_datasets = []
@@ -699,7 +731,8 @@ if __name__ == "__main__":
     dataset_makes = [dataset_map[name] for name in dataset_names]
     names = "-".join([make.__name__ for make in dataset_makes])
 
-    for train, test in [make() for make in dataset_makes]:
+    for make in dataset_makes:
+        train, test = make(force_recompute=force_recompute)
         train_datasets.append(train)
         test_datasets.append(test)
 
