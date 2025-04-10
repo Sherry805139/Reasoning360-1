@@ -579,6 +579,7 @@ class RayPPOTrainer(object):
     def _validate(self):
         reward_tensor_lst = []
         data_source_lst = []
+        dataset_lst = [] 
 
         # Lists to collect samples for the table
         sample_inputs = []
@@ -590,7 +591,7 @@ class RayPPOTrainer(object):
 
             # repeat test batch
             test_batch = test_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.val_kwargs.n,
-                                           interleave=True)
+                                        interleave=True)
 
             # we only do validation on rule-based rm
             if (
@@ -646,8 +647,6 @@ class RayPPOTrainer(object):
             test_batch = test_batch.union(test_output_gen_batch)
 
             # evaluate using reward_function
-            # with open("test_batch_prime_math.txt", "a") as f:
-            #     f.write(str(test_batch))
             reward_tensor = self.val_reward_fn(test_batch)
 
             # Store scores
@@ -660,6 +659,17 @@ class RayPPOTrainer(object):
                     "data_source", ["unknown"] * reward_tensor.shape[0]
                 )
             )
+            
+            # Collect dataset information
+            datasets = []
+            for i in range(reward_tensor.shape[0]):
+                dataset = "unknown"
+                if "extra_info" in test_batch.non_tensor_batch:
+                    extra_info = test_batch.non_tensor_batch["extra_info"][i]
+                    if isinstance(extra_info, dict) and "dataset" in extra_info:
+                        dataset = extra_info["dataset"]
+                datasets.append(dataset)
+            dataset_lst.append(np.array(datasets))
 
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
@@ -667,8 +677,9 @@ class RayPPOTrainer(object):
             torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()
         )  # (batch_size,)
         data_sources = np.concatenate(data_source_lst, axis=0)
+        datasets = np.concatenate(dataset_lst, axis=0)
 
-        # evaluate test_score based on data source
+        # calculate the mean reward for each data source
         data_source_reward = {}
         for i in range(reward_tensor.shape[0]):
             data_source = data_sources[i]
@@ -676,9 +687,24 @@ class RayPPOTrainer(object):
                 data_source_reward[data_source] = []
             data_source_reward[data_source].append(reward_tensor[i].item())
 
+        # calculate the mean reward for each data source and dataset
+        data_source_dataset_reward = {}
+        for i in range(reward_tensor.shape[0]):
+            data_source = data_sources[i]
+            dataset = datasets[i]
+            key = (data_source, dataset)
+            if key not in data_source_dataset_reward:
+                data_source_dataset_reward[key] = []
+            data_source_dataset_reward[key].append(reward_tensor[i].item())
+
         metric_dict = {}
+        # record the mean reward for each data source
         for data_source, rewards in data_source_reward.items():
             metric_dict[f"val/test_score/{data_source}"] = np.mean(rewards)
+
+        # record the mean reward for each data source and dataset
+        for (data_source, dataset), rewards in data_source_dataset_reward.items():
+            metric_dict[f"val/test_score/{data_source}/{dataset}"] = np.mean(rewards)
 
         return metric_dict
 
