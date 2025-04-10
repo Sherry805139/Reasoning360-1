@@ -164,7 +164,7 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
         function=make_map_fn("train"),
         with_indices=True,
         num_proc=64,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     )
     # Analyze the filter reasons
     filter_counts, filter_counts_fine_block_libs = {}, {}
@@ -369,7 +369,7 @@ for i, o in zip(_inputs, _outputs):
         with_indices=True,
         num_proc=64,
         remove_columns=dataset.column_names,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x != EMPTY_RETURN)
     splits = dataset.train_test_split(
         test_size=max(1, min(N_TESTSET_PER_DATASET, len(dataset) * 0.1)), seed=666
@@ -452,12 +452,12 @@ for i, o in zip(_inputs, _outputs):
         function=make_map_fn("train"),
         with_indices=True,
         remove_columns=dataset.column_names,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x != EMPTY_RETURN)
     test_dataset = test_dataset.map(
         function=make_map_fn("test"), 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     )
     return train_dataset, test_dataset
 
@@ -530,12 +530,12 @@ def leetcode2k(force_recompute=False):
     train_dataset = train_dataset.map(
         function=make_map_fn("train"), 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x["reward_model"] is not None)
     test_dataset = test_dataset.map(
         function=make_map_fn("test"), 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x["reward_model"] is not None)
     print(f"Leetcode2k train set: {train_dataset}")
     print(f"Leetcode2k test set: {test_dataset}")
@@ -597,7 +597,7 @@ def humaneval(force_recompute=False):
     test_dataset = dataset.map(
         function=process_fn, 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x["reward_model"] is not None)
     
     # Return empty train dataset and test dataset
@@ -679,13 +679,13 @@ def mbpp(force_recompute=False):
     train_dataset = dataset["train"].map(
         function=make_map_fn("train"), 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x['reward_model'] is not None)
     
     test_dataset = dataset["test"].map(
         function=make_map_fn("test"), 
         with_indices=True,
-        load_from_cache_file=not force_recompute,
+        load_from_cache_file=False,
     ).filter(lambda x: x['reward_model'] is not None)
     
     print(f"MBPP train set: {train_dataset}")
@@ -701,15 +701,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_names", default="kodcode", help="comma separated dataset names"
     )
-    parser.add_argument(
-        "--force_recompute", action="store_true", help="force recompute all map operations, ignoring cache"
-    )
 
     args = parser.parse_args()
 
     root_dir = args.root_dir
     dataset_names = args.dataset_names.split(",")
-    force_recompute = args.force_recompute
 
     train_datasets = []
     test_datasets = []
@@ -725,7 +721,7 @@ if __name__ == "__main__":
     names = "-".join([make.__name__ for make in dataset_makes])
 
     for make in dataset_makes:
-        train, test = make(force_recompute=force_recompute)
+        train, test = make()
         train_datasets.append(train)
         test_datasets.append(test)
 
