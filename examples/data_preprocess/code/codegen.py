@@ -29,8 +29,8 @@ WORKDING_DIR = os.path.join(os.environ.get("HOME"), "Reasoning360")
 
 def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
     # library requirements?
-    rich.print(Rule("Loading KodCode/KodCode-V1-SFT-R1..."))
-    dataset = load_dataset("KodCode/KodCode-V1-SFT-R1")
+    rich.print(Rule("Loading KodCode/KodCode-Light-RL-10K..."))
+    dataset = load_dataset("KodCode/KodCode-Light-RL-10K")
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-32B-Instruct")
 
     def make_map_fn(split):
@@ -112,7 +112,7 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
                 # The above code is using the `rich` library in Python to print a formatted message in the console.
                 # The message is in red color and includes the value of `example['conversation_id']`.
                 # rich.print(
-                #     f"[bold red]Test code failed for {example['conversation_id']}"
+                #     f"[bold red]Test code failed for {example['question_id']}"
                 # )
                 print("===========Unittest failed===========")
                 print(f"reference_solution:")
@@ -146,7 +146,7 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
                     "index": idx,
                     "reference": reference_solution,
                     "prompt": prompt,
-                    "dataset": "KodCode/KodCode-V1-SFT-R1",
+                    "dataset": "KodCode/KodCode-Light-RL-10K",
                     "question_subset": example["subset"],
                     "question_id": example["question_id"],
                     "gpt_difficulty": example["gpt_difficulty"],
@@ -156,8 +156,7 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
 
         return process_fn
 
-    # shuffle the dataset, and pick 5k examples for debugging
-    dataset = dataset["train"].shuffle(seed=666).select(range(1000))
+    dataset = dataset["train"].shuffle(seed=666)
 
     # Preprocess the dataset
     print("Executing tests to ensure correctness...")
@@ -204,6 +203,8 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
         xlabel="Blocked Library",
         ylabel="Count",
     )
+    
+    print(f"Before filtering, KodCode dataset size: {len(dataset)}")
 
     dataset = dataset.filter(lambda x: x["data_source"] is not None)
     print(f"Remaining samples from KodCode: {len(dataset)}")
@@ -468,15 +469,6 @@ def leetcode2k(force_recompute=False):
     print("Train set:", train_dataset)
     print("Test set:", test_dataset)
 
-    warning_text = (
-        "[bold yellow]⚠️ Warning: LeetCode dataset may contain mislabeled data due to unordered `set` comparison.\n"
-        "Some correct outputs might be wrongly marked incorrect.\n\n"
-        "To avoid this issue, please ensure you set [bold]PYTHONHASHSEED=0[/bold] when loading the dataset:\n"
-        "[italic green]PYTHONHASHSEED=0 python examples/data_preprocess/codegen.py --dataset_names leetcode2k[/italic green]\n\n"
-        "Also, make sure to set this consistently when running RL training.[/bold yellow]"
-    )
-
-    rich.print(Panel.fit(warning_text, title="[bold red]Note", border_style="yellow"))
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
