@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
 from rich.rule import Rule
-from rich.panel import Panel
+
 import rich
 import matplotlib.pyplot as plt
 import datasets
