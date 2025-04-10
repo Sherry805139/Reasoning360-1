@@ -27,7 +27,7 @@ from examples.data_preprocess.code.code_utils import *
 WORKDING_DIR = os.path.join(os.environ.get("HOME"), "Reasoning360")
 
 
-def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
+def kodcode():  # Thanks!!! to Zhangchen and Yueqin
     # library requirements?
     rich.print(Rule("Loading KodCode/KodCode-Light-RL-10K..."))
     dataset = load_dataset("KodCode/KodCode-Light-RL-10K")
@@ -223,7 +223,7 @@ def kodcode(force_recompute=False):  # Thanks!!! to Zhangchen and Yueqin
 
 
 # this dataset is super noisy and needs code execution to verify the tasks
-def taco(force_recompute=False):
+def taco():
     rich.print(Rule("Loading likaixin/TACO-verified..."))
     dataset = load_dataset("likaixin/TACO-verified")["train"]
     
@@ -462,7 +462,7 @@ for i, o in zip(_inputs, _outputs):
     return train_dataset, test_dataset
 
 
-def leetcode2k(force_recompute=False):
+def leetcode2k():
     rich.print(Rule("Loading LeetCodeDataset..."))
     train_dataset = load_dataset("newfacade/LeetCodeDataset")["train"]
     test_dataset = load_dataset("newfacade/LeetCodeDataset")["test"]
@@ -542,7 +542,7 @@ def leetcode2k(force_recompute=False):
     return train_dataset, test_dataset
 
 
-def humaneval(force_recompute=False):
+def humaneval():
     rich.print(Rule("Loading OpenAI HumanEval..."))
     dataset = load_dataset("openai_humaneval")["test"]
     print("HumanEval dataset:", dataset)
@@ -612,7 +612,7 @@ def humaneval(force_recompute=False):
     print(f"HumanEval test set: {test_dataset}")
     return empty_train, test_dataset
 
-def mbpp(force_recompute=False):
+def mbpp():
     rich.print(Rule("Loading MBPP dataset..."))
     dataset = load_dataset("google-research-datasets/mbpp")
     
