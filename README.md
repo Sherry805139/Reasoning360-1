@@ -16,20 +16,20 @@ Remember to process data and wandb login before launching the experiments.
 Take `Deepscaler` as an example.
 Deepscaler has 40K high-quality math (Q, A) pairs from previous AIME, AMC, etc. Prepare this by running:
 ```bash
-python examples/data_preprocess/deepscaler_preview.py --local_dir data/deepscaler_preview
+python examples/data_preprocess/math/deepscaler_preview.py --local_dir data/deepscaler_preview
 ```
 
 ### 2. Code
 Take `Kodcode` as an example.
 Kodcode is a dataset of 400K code (Q, solution, utests) triplets from previous ACM ICPC, etc. Prepare this by running:
 ```bash
-python examples/data_preprocess/codgen.py --dataset_names kodcode
+python examples/data_preprocess/code/codegen.py --dataset_names kodcode
 ```
 
 ### 3. Logic
 Take `Ordering Puzzle` as an example.
 ```bash
-python examples/data_processs/puzzle_gen.py --num_puzzles 10000 --output_dir data/puzzles_dataset --output_file puzzles_dataset.json --test True
+python examples/data_processs/logic/puzzle_gen.py --num_puzzles 10000 --output_dir data/puzzles_dataset --output_file puzzles_dataset.json --test True
 ```
 
 
