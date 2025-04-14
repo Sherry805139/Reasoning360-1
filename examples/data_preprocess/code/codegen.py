@@ -797,6 +797,9 @@ def livecodebench():
             metadata = example["metadata"]
             function_name = metadata.get("func_name")
                 
+            # Print debug info about test cases for this example
+            print(f"Example {idx}: {len(tests)} test cases, total input length: {sum(len(t['input']) for t in tests)}, total output length: {sum(len(str(t['output'])) for t in tests)}")
+                
             # Handle different test types
             if tests[0]["testtype"] == "functional":
                 if not function_name:
@@ -821,11 +824,6 @@ def check_{function_name}():
 check_{function_name}()
 """
                 
-                # For debugging - print a few examples
-                if idx < 20:  
-                    print(f"Generated test code for example {idx}:")
-                    print(test_code)
-                
                 oracle = json.dumps({"functional": test_code})
                 
             elif tests[0]["testtype"] == "stdin":
@@ -835,14 +833,6 @@ check_{function_name}()
                 for test in tests:
                     stdin_list.append(test["input"])
                     stdout_list.append(test["output"])
-
-                # For debugging - print a few examples
-                if idx < 20: 
-                    print(f"Generated test code for example {idx}:")
-                    for i in range(len(stdin_list)):
-                        print(f"Test {i+1}:")
-                        print(f"Input: {stdin_list[i]}")
-                        print(f"Output: {stdout_list[i]}")
                 
                 oracle = json.dumps({"inputs": stdin_list, "outputs": stdout_list})
             else:

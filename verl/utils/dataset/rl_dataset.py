@@ -125,7 +125,11 @@ class RLHFDataset(Dataset):
         dataframes = []
         for parquet_file in self.parquet_files:
             # read parquet files and cache
-            dataframe = pd.read_parquet(parquet_file)
+            try:
+                dataframe = pd.read_parquet(parquet_file)
+            except Exception as e:
+                import polars as pl
+                dataframe = pl.read_parquet(parquet_file).to_pandas()
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)
 
@@ -133,11 +137,30 @@ class RLHFDataset(Dataset):
 
         print(self.dataframe.head())
 
+        print(f'Original dataset len: {len(self.dataframe)}')
+        
+        # Identify rows with None in prompt_key
+        none_rows = self.dataframe[self.dataframe[self.prompt_key].isna()]
+        print(f'Found {len(none_rows)} rows with None in {self.prompt_key} column')
+        
+        # Print a few examples of None rows for debugging
+        if len(none_rows) > 0:
+            print("Examples of rows with None prompt:")
+            for i, (idx, row) in enumerate(none_rows.iterrows()):
+                print(f"Row index {idx}: {row.to_dict()}")
+                if i >= 2:  # Limit to 3 examples
+                    break
+        
+        # Drop rows with None in prompt_key
+        self.dataframe = self.dataframe[self.dataframe[self.prompt_key].notna()]
+        print(f'Dataset len after dropping None prompts: {len(self.dataframe)}')
+
         # Safely check if apply_chat_template exists in dataframe
         # NOTE: added by Reasoning360
         if "apply_chat_template" not in self.dataframe:
             print("Warning: apply_chat_template column not found in dataframe. Defaulting to True.")
             self.dataframe["apply_chat_template"] = [True] * len(self.dataframe)
+        
 
         # filter out too long prompts
         if self.filter_overlong_prompts:
