@@ -586,21 +586,12 @@ class RayPPOTrainer(object):
         sample_outputs = []
         sample_scores = []
 
-        print(f"Validation dataloader length: {len(self.val_dataloader)}")
-        
         for test_data in self.val_dataloader:
-            print(f"Processing validation batch with keys: {list(test_data.keys())}")
-            print(f"Batch size: {len(test_data['input_ids'])}")
-            
             test_batch = DataProto.from_single_dict(test_data)
-            print(f"Created DataProto with batch keys: {list(test_batch.batch.keys())}")
-            print(f"Non-tensor batch keys: {list(test_batch.non_tensor_batch.keys())}")
 
             # repeat test batch
-            print(f"Repeating test batch {self.config.actor_rollout_ref.rollout.val_kwargs.n} times (interleaved)")
             test_batch = test_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.val_kwargs.n,
                                         interleave=True)
-            print(f"After repeat, batch size: {len(test_batch.batch['input_ids'])}")
 
             # we only do validation on rule-based rm
             if (
@@ -615,18 +606,14 @@ class RayPPOTrainer(object):
                 self.tokenizer.decode(ids, skip_special_tokens=True)
                 for ids in input_ids
             ]
-            print(f"Decoded {len(input_texts)} input texts")
             sample_inputs.extend(input_texts)
 
-            print(f"Preparing generation batch")
             if 'multi_modal_inputs' in test_batch.non_tensor_batch.keys():
-                print("Found multi_modal_inputs, including in generation batch")
                 test_gen_batch = test_batch.pop(
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                     non_tensor_batch_keys=['raw_prompt_ids', 'multi_modal_data', 'multi_modal_inputs'],
                 )
             else:
-                print("Standard text-only generation batch")
                 test_gen_batch = test_batch.pop(
                     batch_keys=['input_ids', 'attention_mask', 'position_ids'],
                     non_tensor_batch_keys=['raw_prompt_ids'],
@@ -640,18 +627,10 @@ class RayPPOTrainer(object):
                 'validate': True,
             }
             print(f'test_gen_batch meta info: {test_gen_batch.meta_info}')
-            print(f'test_gen_batch shape: input_ids={test_gen_batch.batch["input_ids"].shape}, attention_mask={test_gen_batch.batch["attention_mask"].shape}')
 
             # pad to be divisible by dp_size
-            print(f"Padding batch to be divisible by worker world size: {self.actor_rollout_wg.world_size}")
             test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
-            print(f"Padded batch size: {len(test_gen_batch_padded.batch['input_ids'])}, pad_size: {pad_size}")
-            
-            # This is where the error seems to be happening
-            print("Calling generate_sequences on actor_rollout_wg - CRITICAL POINT")
-            print(f"Memory stats before generation: {torch.cuda.memory_allocated() / 1e9:.2f}GB allocated, {torch.cuda.memory_reserved() / 1e9:.2f}GB reserved")
             test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
-            print("Generation successful")
 
             # unpad
             test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
@@ -659,7 +638,6 @@ class RayPPOTrainer(object):
 
             # Store generated outputs
             output_ids = test_output_gen_batch.batch["responses"]
-            print(f"Output responses shape: {output_ids.shape}")
             output_texts = [
                 self.tokenizer.decode(ids, skip_special_tokens=True)
                 for ids in output_ids
@@ -667,7 +645,6 @@ class RayPPOTrainer(object):
             sample_outputs.extend(output_texts)
 
             test_batch = test_batch.union(test_output_gen_batch)
-            print(f"Combined batch with keys: {list(test_batch.batch.keys())}")
 
             # evaluate using reward_function
             reward_tensor = self.val_reward_fn(test_batch)
@@ -694,7 +671,6 @@ class RayPPOTrainer(object):
                 datasets.append(dataset)
             dataset_lst.append(np.array(datasets))
 
-        print(f"Logging validation generations, samples collected: {len(sample_inputs)}")
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
         reward_tensor = (
@@ -729,6 +705,7 @@ class RayPPOTrainer(object):
         # record the mean reward for each data source and dataset
         for (data_source, dataset), rewards in data_source_dataset_reward.items():
             metric_dict[f"val/test_score/{data_source}/{dataset}"] = np.mean(rewards)
+
         return metric_dict
 
     def init_workers(self):
