@@ -28,6 +28,9 @@ def _default_compute_score(data_source, solution_str, ground_truth, reward_metri
     elif data_source == 'math_dapo' or data_source.startswith("aime"): # TWK NOTE: commented out original filtering to DAPO function.
         from . import math_dapo
         res = math_dapo.compute_score(solution_str, ground_truth)
+    elif data_source == "countdown":
+        from . import countdown
+        res = countdown.compute_score(solution_str, ground_truth)
     elif data_source in [
         "numina_aops_forum",
         "numina_synthetic_math",
