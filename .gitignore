@@ -156,3 +156,6 @@ docker/images/
 
 # toolkits
 toolkits/
+
+#mathlib4
+verl/utils/reward_score/dsp1/mathlib4
