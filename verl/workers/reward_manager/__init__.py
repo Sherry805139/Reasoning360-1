@@ -19,3 +19,4 @@ from .batch import BatchRewardManager
 from .dapo import DAPORewardManager
 from .async_dapo import AsyncDAPORewardManager
 from .llm_judge import LLMJudgeRewardManager
+from .prover_lean4server import ProverLean4RewardManager

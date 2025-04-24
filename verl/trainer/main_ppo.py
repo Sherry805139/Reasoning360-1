@@ -160,6 +160,10 @@ class TaskRunner:
         elif reward_manager_name == "llm_judge":
             from verl.workers.reward_manager import LLMJudgeRewardManager
             reward_manager_cls = LLMJudgeRewardManager
+        # NOTE: added by Reasoning360
+        elif reward_manager_name == "lean4prover":
+            from verl.workers.reward_manager import ProverLean4RewardManager
+            reward_manager_cls = ProverLean4RewardManager
         else:
             raise NotImplementedError
 

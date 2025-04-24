@@ -28,17 +28,12 @@ from typing import Dict, Any
 from verl.utils.data_process.utils import set_seed, save_dataset
 
 # R1-zero-style full template
-R1_TEMPLATE = (
-    "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. "
-    "The assistant first thinks about the reasoning process in the mind and then provides the response. "
-    "The reasoning process is enclosed within <think></think>.\n"
-    "User: {{prompt}} Please put your answer in \\boxed{} tags.\n"
-    "Assistant: <think>"
-)
-
+statement_prompt = "Here is the Lean4 theorem statement. You need to complete the full proof following the statement: "
+        # Combine statement prompt with question and math instruction
 
 def make_map_fn(split: str, data_source: str, prompt_format: str) -> callable:
     def process_fn(example: Dict[str, Any], idx: int) -> Dict[str, Any]:
+
         header = example.get("header", "")
         statement = example.get("formal_statement", "")
         goal = example.get("goal", "")
@@ -46,26 +41,20 @@ def make_map_fn(split: str, data_source: str, prompt_format: str) -> callable:
         question = header + statement + goal
         response = (question+proof).replace("\\n", "\n")
 
+        content = (
+            statement_prompt + "" + question +
+            " Please output the final answer within \\boxed{}."
+        )
         if prompt_format == "chat_style":
             # chat-style prompt
-            msg = {"role": "user", "content": question.replace("\\n", "\n")}
+            msg = {"role": "user", "content": content}
             return {
                 "data_source": data_source,
                 "prompt": [msg],
-                "ability": "theorem_proving",
+                "ability": "TheoremProver",
+                "statement": question,
                 "apply_chat_template": True,
                 "response": response,
-                "extra_info": {"split": split, "index": idx},
-            }
-        elif prompt_format == "r1_zero_style":
-            # r1-zero-style raw prompt
-            raw = R1_TEMPLATE.replace("{{prompt}}", question.replace("\\n", "\n"))
-            return {
-                "data_source": data_source,
-                "raw_prompt": raw,
-                "apply_chat_template": False,
-                "ability": "theorem_proving",
-                "reward_model": {"style": "rule", "ground_truth": response},
                 "extra_info": {"split": split, "index": idx},
             }
         else:
@@ -83,11 +72,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     set_seed(args.seed)
-    base = f"{args.domain}__{args.name}"
+    base = f"{args.domain}"
     print("Loading DeepSeek-Prover-V1 dataset...")
     dataset = datasets.load_dataset("deepseek-ai/DeepSeek-Prover-V1", split="train")
 
-    for fmt in ["chat_style", "r1_zero_style"]:
+    for fmt in ["chat_style"]:
         ds_name = f"{base}__{fmt}"
         print(f"\nProcessing format: {fmt}")
         fn = make_map_fn("train", ds_name, fmt)

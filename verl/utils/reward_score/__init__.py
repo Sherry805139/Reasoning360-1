@@ -53,6 +53,9 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
     elif data_source in ['graph_logical_dataset']:
         from . import graph_dataset
         res = graph_dataset.compute_score(solution_str, ground_truth)
+    elif data_source.startswith('TheoremProver'):
+        from . import dsprover
+        res = dsprover.compute_score(solution_str, ground_truth)
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
 
