@@ -1,0 +1,4 @@
+[submodule "/lustrefs/users/shibo.hao/yutaoxie/Reasoning360/verl/utils/reward_score/dsp1/mathlib"]
+	path = /lustrefs/users/shibo.hao/yutaoxie/Reasoning360/verl/utils/reward_score/dsp1/mathlib
+	url = https://github.com/AndreasXie/mathlib4.git
+	branch = deepseek
