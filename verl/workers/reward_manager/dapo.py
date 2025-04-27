@@ -172,9 +172,9 @@ class DAPORewardManager:
                 else:
                     print(f"[score]", score)
 
-        print(f"[DEBUG] Final reward_tensor shape: {reward_tensor.shape}")
-        print(f"[DEBUG] Non-zero elements in reward_tensor: {(reward_tensor != 0).sum().item()}")
-        print(f"[DEBUG] Unique data sources processed: {list(already_print_data_sources.keys())}")
+        # print(f"[DEBUG] Final reward_tensor shape: {reward_tensor.shape}")
+        # print(f"[DEBUG] Non-zero elements in reward_tensor: {(reward_tensor != 0).sum().item()}")
+        # print(f"[DEBUG] Unique data sources processed: {list(already_print_data_sources.keys())}")
 
         if return_dict:
             return {

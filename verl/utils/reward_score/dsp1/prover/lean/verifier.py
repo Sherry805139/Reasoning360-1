@@ -19,7 +19,7 @@ from verl.utils.reward_score.dsp1.prover.utils import AttrDict
 
 HOME_DIR = os.path.expanduser('~')
 DEFAULT_LAKE_PATH = f'{HOME_DIR}/.elan/bin/lake'
-DEFAULT_LEAN_WORKSPACE = './mathlib4/'
+DEFAULT_LEAN_WORKSPACE = 'verl/utils/reward_score/dsp1/mathlib'
 
 
 def verify_lean4_file(code, lake_path=DEFAULT_LAKE_PATH, lean_workspace=DEFAULT_LEAN_WORKSPACE, last_env=None, verbose=False, timeout=300, allTactics=False, ast=False, premises=False, tactics=False):

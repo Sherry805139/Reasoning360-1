@@ -12,87 +12,113 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from verl import DataProto
-from verl.utils.reward_score.dsp1.prover.lean.verifier import Lean4ServerScheduler  # added by reasoning360
-import torch
+import re, os, datetime, torch
 from collections import defaultdict
+from difflib import SequenceMatcher
+from verl import DataProto
+from verl.utils.reward_score.dsp1.prover.lean.verifier import Lean4ServerScheduler
 
+# ---------- 工具函数 ----------
+_theorem_name_re = re.compile(r"\btheorem\s+(\w+)", re.IGNORECASE)
+_ws_re           = re.compile(r"\s+")
 
+def _normalize(t: str) -> str:
+    t = re.sub(r"--.*", "", t)                # 行注释
+    t = re.sub(r"/-.*?-/", "", t, flags=re.S) # 块注释
+    return _ws_re.sub("", t)
+
+def statement_solved(statement: str, proof: str) -> bool:
+    m = _theorem_name_re.search(statement)
+    if m and not re.search(rf"\btheorem\s+{re.escape(m.group(1))}\b", proof):
+        return False
+    s_norm, p_norm = _normalize(statement), _normalize(proof)
+    if s_norm and s_norm in p_norm:
+        return True
+    return SequenceMatcher(None, s_norm, p_norm).quick_ratio() > 0.9
+
+def extract_lean4proof(text: str) -> str:
+    blocks = re.findall(r"```lean\s*\n([\s\S]*?)```", text, re.I)
+    return blocks[-1].strip("\n") if blocks else ""
+
+# ---------- 主类 ----------
 class ProverLean4RewardManager:
-    """Asynchronous reward manager using Lean4ServerScheduler."""
-
-    def __init__(self, tokenizer, num_cpus=64, num_examine: int = 1, compute_score=None, **kwargs) -> None:
+    def __init__(self, tokenizer, num_cpus=32, num_examine=1,
+                 save_lean_dir="./lean4_snippets", **_):
         self.tokenizer = tokenizer
         self.num_examine = num_examine
-        # initialize Lean4 scheduler
+        self.format_re = re.compile(r"```lean[\s\S]*?```", re.I)
         self.lean4_scheduler = Lean4ServerScheduler(
-            max_concurrent_requests=num_cpus,
-            timeout=300,
-            memory_limit=200,
-            name="lean4_hf_verifier_stability"
-        )
+            max_concurrent_requests=num_cpus, timeout=300, memory_limit=200,
+            name="lean4_hf_verifier_stability")
+        self.save_lean_dir = save_lean_dir
+        os.makedirs(save_lean_dir, exist_ok=True)
 
-    def __call__(self, data: DataProto, return_dict: bool = False):
-        """
-        Batch verification: submit all snippets at once, then fetch outputs.
-        Returns reward_tensor and optional reward_extra_info.
-        """
-        batch_size = len(data)
-        reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
-        reward_extra_info = defaultdict(list)
-        # Step 1: prepare all full_snippets
-        full_snippets = []
-        meta = []  # store (data_source, ground_truth, prompt_str, resp_len)
-        for i in range(batch_size):
+    # --------- 主调用 ---------
+    def __call__(self, data: DataProto, return_dict=False):
+        batch = len(data)
+        reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
+        extra = defaultdict(list)
+
+        full_snips, meta = [], []
+
+        # Step-1 解析 response
+        for i in range(batch):
             item = data[i]
-            prompts_id = item.batch["prompts"]
-            attn = item.batch["attention_mask"]
-            prompt_len = attn.sum(dim=-1).item()
-            prompt_str = self.tokenizer.decode(
-                prompts_id[0, :prompt_len], skip_special_tokens=True)
+            attn      = item.batch["attention_mask"]
+            promptlen = int(attn.sum())
+            resplen   = int(attn[promptlen:].sum())
+            if resplen == 0:
+                extra["format_score"].append(0.0)
+                extra["statement_hit"].append(0.0)
+                continue
 
-            responses_id = item.batch["responses"]
-            resp_len = attn[0, prompt_len:].sum().item()
-            response_str = self.tokenizer.decode(
-                responses_id[0, :resp_len], skip_special_tokens=True)
-            
-            statement = item.non_tensor_batch["statement"]
-            ground_truth = statement + "\n" + item.non_tensor_batch["response"]
+            resp_ids = item.batch["responses"]
+            resp_str = self.tokenizer.decode(resp_ids[:resplen], skip_special_tokens=True)
 
-            snippet = statement + "\n" + response_str
-            full_snippets.append(snippet.replace("\\n", "\n"))
-            
-            meta.append((ground_truth, prompt_str, response_str, resp_len))
+            fmt_ok = bool(self.format_re.search(resp_str))
+            extra["format_score"].append(float(fmt_ok))
+            # 只有 resplen>0 时才安全写
+            reward_tensor[i, resplen-1] = float(fmt_ok)
 
-        # Step 2: submit all requests asynchronously
-        request_ids = self.lean4_scheduler.submit_all_request(full_snippets)
-        # Step 3: get all outputs
-        outputs = self.lean4_scheduler.get_all_request_outputs(request_ids)
+            proof_code = extract_lean4proof(resp_str)
+            stmt       = item.non_tensor_batch["statement"]
+            hit_stmt   = statement_solved(stmt, proof_code)
+            extra["statement_hit"].append(float(hit_stmt))
 
-        # Step 4: process outputs
-        for i, out in enumerate(outputs):
-            data_source, ground_truth, prompt_str, response_str, resp_len = meta[i]
-            passed = bool(out.get("pass", False))
-            score = 1.0 if passed else 0.0
-            reward_tensor[i, resp_len - 1] = score
-            reward_extra_info["score"].append(score)
-            reward_extra_info["lean_out"].append(out)
+            if not (proof_code and hit_stmt):
+                continue
 
-            # debugging print
-            if reward_extra_info.get(data_source, []).count(score) < self.num_examine:
-                print("[prompt]", prompt_str)
-                print("[response]", response_str)
-                print("[ground_truth]", ground_truth)
-                print(f"[score] {score}")
-                print("[lean_out]", out)
+            full_snips.append(proof_code)
+            meta.append((i, stmt, proof_code, resplen))
 
+            if i < self.num_examine:
+                print("=== prompt ===\n", stmt)
+                print("=== response ===\n", resp_str.splitlines()[:40])
+
+        # Step-2 Lean4 校验
+        outs = self.lean4_scheduler.get_all_request_outputs(
+            self.lean4_scheduler.submit_all_request(full_snips))
+
+        # Step-3 通过则加分 + 保存
+        for j, out in enumerate(outs):
+            i, stmt, proof_code, resplen = meta[j]
+            passed = bool(out.get("pass")) and bool(out.get("complete"))
+            if passed:
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                with open(os.path.join(self.save_lean_dir, f"{ts}_idx{i}.lean"),
+                          "w", encoding="utf-8") as f:
+                    f.write(stmt + "\n" + proof_code)
+                reward_tensor[i, resplen-1] += 1.0
+
+        # 结果打包
         if return_dict:
-            return {"reward_tensor": reward_tensor,
-                    "reward_extra_info": reward_extra_info}
+            total   = reward_tensor.sum(dim=1).tolist()
+            fmt     = extra["format_score"]
+            extra["correctness_score"] = [t - f for t, f in zip(total, fmt)]
+            return {"reward_tensor": reward_tensor, "reward_extra_info": extra}
         return reward_tensor
 
     def close(self):
-        """Close the scheduler to free resources."""
         self.lean4_scheduler.close()
 
 
