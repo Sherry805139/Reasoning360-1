@@ -26,7 +26,6 @@ class NaiveRewardManager:
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
         self.reward_fn_key = reward_fn_key
-        self.reward_metric = kwargs.get("reward_metric", None)
 
     def __call__(self, data: DataProto, return_dict: bool = False):
         """We will expand this function gradually based on the available datasets"""
@@ -72,7 +71,6 @@ class NaiveRewardManager:
                 solution_str=response_str,
                 ground_truth=ground_truth,
                 extra_info=extra_info,
-                reward_metric=self.reward_metric,
             )
 
             if isinstance(score, dict):

@@ -39,6 +39,7 @@ from verl.workers.rollout.base import BaseRollout
 from vllm.distributed import parallel_state as vllm_ps
 from vllm import LLM, SamplingParams
 from verl.third_party.vllm import vllm_version
+import os
 
 # Added by Reasoning360
 import types
@@ -97,8 +98,6 @@ class vLLMRollout(BaseRollout):
 
         if kwargs.get("train_tp", None) is not None:
             # deployed with megatron
-            import os
-
             os.environ["CUDA_TIMER_STREAM_KAFKA_ENABLE"] = "0"
             os.environ["MEGATRON_IMPORT_TIMERS"] = "0"
             train_tp = kwargs.get("train_tp", None)
@@ -136,6 +135,7 @@ class vLLMRollout(BaseRollout):
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=config.enable_chunked_prefill,
             enable_prefix_caching=True,
+            seed=int(os.getenv("RANK", "0")) // tensor_parallel_size,
         )
         # NOTE: added by Reasoning360
         self._monkey_patch_vllm_engine_v0()
@@ -325,8 +325,6 @@ class vLLMRollout(BaseRollout):
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
 
         tokens_per_second = torch.sum(response_attention_mask).item() / t()
-        import os
-
         print(
             f'Tokens per second: {tokens_per_second} t/s on device {os.environ["CUDA_VISIBLE_DEVICES"]} on host {os.uname().nodename}',
             flush=True,

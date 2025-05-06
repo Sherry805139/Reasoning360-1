@@ -23,6 +23,8 @@ from collections import Counter, defaultdict
 from functools import partial
 import wandb
 
+# Add at module level (top of file with other imports)
+_scores_tables = {}  # Global dictionary to store wandb tables
 
 def reduce_metrics(metrics: Dict[str, List[Any]]) -> Dict[str, Any]:
     for key, val in metrics.items():
@@ -281,21 +283,68 @@ def process_validation_metrics(data_sources: list[str], sample_inputs: list[str]
     return data_src2var2metric2val
 
 def compute_difficulty_histogram_metrics(batch: DataProto, config) -> Dict[str, Any]:
+    metrics = {}
+    
     with torch.no_grad():    
         num_rollout = config.actor_rollout_ref.rollout.n
-        sequence_score = batch.batch['token_level_scores'].sum(-1)
+        sequence_score = batch.batch['token_level_scores'].sum(-1)  # batch_size
         uids = batch.non_tensor_batch['uid']
         sorted_indices = sorted(range(len(uids)), key=lambda i: uids[i])
         sorted_indices_tensor = torch.tensor(sorted_indices, device=sequence_score.device)
         sequence_score = sequence_score[sorted_indices_tensor]
 
         batch_score = sequence_score.reshape([-1, num_rollout]) # batch_size, num_rollout
+        
+        # To filter overlong reward in showing pass rate
+        is_overlong = batch.non_tensor_batch.get("is_overlong", None)
+        if is_overlong:
+            overlong_reward = batch.non_tensor_batch.get("overlong_reward", None)
+            assert overlong_reward is not None
+            batch_score -= overlong_reward
 
         avg_batch_score_per_batch = torch.mean(batch_score, dim=-1) # batch_size
         avg_batch_score_per_batch_np = avg_batch_score_per_batch.detach().cpu().numpy().reshape([-1])
 
-    metrics ={
-        'acc_inter_val_per_batch/histogram': wandb.Histogram(sequence=avg_batch_score_per_batch_np, num_bins=10),
-    }
+        # group the score by batch.non_tensor_batch['data_source']
+        data_source_score_dict = defaultdict(list)
+        for score, data_source in zip(avg_batch_score_per_batch_np, batch.non_tensor_batch['data_source']):
+            data_source_score_dict[data_source].append(score)
 
+        # add wandb histogram for each data source
+        for data_source, scores in data_source_score_dict.items():
+            metrics[f'acc_inter_val_per_batch/{data_source}/histogram'] = wandb.Histogram(sequence=scores, num_bins=10)
+            
+            # Create or get existing table
+            table_key = f'scores_table_{data_source}'
+            if table_key not in _scores_tables:
+                _scores_tables[table_key] = wandb.Table(columns=["step", "score"])
+            
+            # Create new table with existing data
+            new_table = wandb.Table(columns=["step", "score"], data=_scores_tables[table_key].data)
+            
+            # Add new scores
+            for score in scores:
+                new_table.add_data(batch.meta_info.get("step", 0), score)
+                
+            metrics[f'acc_inter_val_per_batch/{data_source}/scores'] = new_table
+            _scores_tables[table_key] = new_table  # Update reference for next time
+
+    # Overall histogram
+    metrics['acc_inter_val_per_batch/histogram'] = wandb.Histogram(sequence=avg_batch_score_per_batch_np, num_bins=10)
+    
+    # Overall scores table
+    if 'all_scores_table' not in _scores_tables:
+        _scores_tables['all_scores_table'] = wandb.Table(columns=["step", "score"])
+    
+    # Create new table with existing data
+    new_all_table = wandb.Table(columns=["step", "score"], data=_scores_tables['all_scores_table'].data)
+    
+    # Add new scores
+    all_scores = avg_batch_score_per_batch_np.tolist()
+    for score in all_scores:
+        new_all_table.add_data(batch.meta_info.get("step", 0), score)
+        
+    metrics['acc_inter_val_per_batch/all_scores'] = new_all_table
+    _scores_tables['all_scores_table'] = new_all_table  # Update reference for next time
+    
     return metrics

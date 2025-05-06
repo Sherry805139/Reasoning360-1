@@ -11,13 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Answer checker API that uses sympy to simplify expressions and check for equality.
-
-Call grade_answer(given_answer: str, ground_truth: str).
-
-FROM: https://github.com/openai/prm800k/blob/main/prm800k/grading/grader.py
-"""
 
 input_template = """You are a teacher and your task is to grade the student's answer with the reference answer.
 
@@ -404,7 +397,11 @@ import math
 def llm_check_answer(model_output: str, ground_truth: str, question: str) -> bool:
     # use llm to check if the answer is correct
 
-    url = "http://91.239.86.146:30000/v1/chat/completions"
+    # url = "http://176.56.200.81:30000/v1/chat/completions"
+    url = os.getenv("MATH_LLM_JUDGE_URL")
+    if not url:
+        raise ValueError("MATH_LLM_JUDGE_URL is not set")
+    
     prompt = input_template.format(QUESTION=question, STUDENT_ANSWER=model_output, REFERENCE_ANSWER=ground_truth)
     
     data = {

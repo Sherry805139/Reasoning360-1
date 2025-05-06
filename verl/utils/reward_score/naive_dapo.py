@@ -514,11 +514,11 @@ def compute_score(solution_str: str,
             correct = False
 
 
-    reward = 1.0 if correct else -1.0
+    # reward = 1.0 if correct else -1.0
+    reward = 1.0 if correct else 0.
     acc = correct
 
     return {
         "score": reward,
         "acc": acc,
-        "pred": pred,
     }

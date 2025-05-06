@@ -2,31 +2,25 @@ import re
 import random
 import ast
 import operator
+import signal
+import contextlib
 
+class TimeoutException(Exception):
+    pass
 
+@contextlib.contextmanager
+def time_limit(seconds: float):
+    def signal_handler(signum, frame):
+        raise TimeoutException("Timed out!")
 
-def validate_format(response):
-    if not response:
-        return False
-    
-    pattern = r"<think>(.*?)</think>\s*<answer>(.*?)</answer>"
-    match = re.search(pattern, response, re.DOTALL)
-    if match:
-        return True
-    return False
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    signal.signal(signal.SIGALRM, signal_handler)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
 
 def extract_solution(solution_str):
-    if "Assistant:" in solution_str:
-        solution_str = solution_str.split("Assistant:", 1)[1]
-    # for llama chat template
-    elif "<|start_header_id|>assistant<|end_header_id|>" in solution_str:
-        solution_str = solution_str.split("<|start_header_id|>assistant<|end_header_id|>", 1)[1]
-    # qwen chat template
-    elif "<|im_start|>assistant" in solution_str:
-        solution_str = solution_str.split("<|im_start|>assistant", 1)[1]
-    else:
-        return None
-    
 
     answer_pattern = r'<answer>(.*?)</answer>'
     match = re.finditer(answer_pattern, solution_str)
@@ -39,40 +33,41 @@ def extract_solution(solution_str):
     else:
         return None
 
-def compute_score(solution_str, ground_truth, method='strict', format_score=0.1, score=1.):
-    if not isinstance(ground_truth, str):
-        ground_truth = str(ground_truth)
-
-    target = ground_truth.lower()
-    solution = extract_solution(solution_str)
-    if solution:
-        solution = solution.lower()
-    do_print = random.randint(1, 64) == 1
-    # delete this
-    do_print = True
-    if do_print:
-        print(f"target: {target}, solution: {solution}")
-    if not solution:
-        return 0.0
+def compute_score(solution_str, ground_truth, timeout: float = 10.0):
+    """The scoring function for graph dataset task.
     
-    if not validate_format(solution_str):
-        if do_print:
-            print(f"Format not followed properly")
-        return format_score
-
+    Args:
+        solution_str: the solution text
+        ground_truth: the correct answer
+        timeout: maximum time in seconds to allow for computation
+    """
     try:
-        if target == solution:
-            return score
-        else:
-            if do_print:
-                print(f"Solution not correct")
-            return format_score
+        with time_limit(timeout):
+            if not isinstance(ground_truth, str):
+                ground_truth = str(ground_truth)
+
+            target = ground_truth.lower()
+            solution = extract_solution(solution_str)
+            
+            if solution:
+                solution = solution.lower()
+            else:
+                score = 0.0
+
+            try:
+                if target == solution:
+                    score = 1.0
+                else:
+                    score = 0.0
+
+            except Exception as e:
+                score = 0.0
+
+    except TimeoutException:
+        print("Computation timed out in graph_dataset")
+        score = 0.0 
     except Exception as e:
-        if do_print:
-            print(f"Error in computing score: {e}")
-        return format_score
+        print(f"Error in compute_score in graph_dataset: {e}")
+        score = 0.0
 
-    
-
-
-
+    return {"score": score, "acc": score}

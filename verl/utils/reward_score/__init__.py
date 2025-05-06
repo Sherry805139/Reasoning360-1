@@ -14,112 +14,60 @@
 # from . import gsm8k, math, prime_math, prime_code
 
 
-def _default_compute_score(data_source, solution_str, ground_truth, reward_metric=None, extra_info=None):
-    if data_source == "openai/gsm8k":
-        from . import gsm8k
-        res = gsm8k.compute_score(solution_str, ground_truth)
-    elif data_source in ['lighteval/MATH', 'DigitalLearningGmbH/MATH-lighteval']:
-        from . import math
-        res = math.compute_score(solution_str, ground_truth)
-        # Use Math-Verify (https://github.com/huggingface/Math-Verify) for better evaluation accuracy
-
-        # from . import math_verify # from . import math
-        # res = math_verify.compute_score(solution_str, ground_truth) # res = math.compute_score(solution_str, ground_truth)
-    elif data_source == 'math_dapo' or data_source.startswith("aime"): # TWK NOTE: commented out original filtering to DAPO function.
-        from . import math_dapo
-        res = math_dapo.compute_score(solution_str, ground_truth)
-    elif data_source == "countdown":
-        from . import countdown
-        res = countdown.compute_score(solution_str, ground_truth)
-    elif data_source in [
-        "numina_aops_forum",
-        "numina_synthetic_math",
-        "numina_amc_aime",
-        "numina_synthetic_amc",
-        "numina_cn_k12",
-        "numina_olympiads",
-    ]:
-        from . import prime_math
-
-        res = prime_math.compute_score(solution_str, ground_truth)
-    elif data_source in ["codecontests", "apps", "codeforces", "taco"]:
-        from . import prime_code
-
-        res = prime_code.compute_score(solution_str, ground_truth, continuous=True)
-    elif data_source in ['hiyouga/geometry3k']:
-        from . import geo3k
+def _default_compute_score(data_source, solution_str, ground_truth, extra_info=None):
+    
+    reward_metric = extra_info.get("reward_metric", None)
+    
+    if data_source.startswith("math"):
         
-        res = geo3k.compute_score(solution_str, ground_truth)
-    # NOTE: added by Reasoning360
-    elif data_source in [
-        "agentica-org/DeepScaleR-Preview-Dataset",
-        "nanoverl/math",
-        "nanoverl/aime",
-        "nanoverl/amc",
-        "nanoverl/minerva",
-        "nanoverl/olympiad_bench",
-        "orz_math_57k_collected.json",
-        "examples/data_preprocess/orz_math_57k_collected.json",
-        "SynthLabsAI/Big-Math-RL-Verified",
-        "SDSB/deepscale_partial_mar21_filtered_basic",
-        "SDSB/big_math_partial_mar21_filtered_basic",
-        "SDSB/aime_repeated_8x",
-        "SDSB/amc_repeated_4x",
-    ]:  
-        if reward_metric == "prime_math" or reward_metric is None:
+        if reward_metric == "prime_math":
             from . import prime_math
-
-            res = prime_math.compute_score(solution_str, ground_truth)[0]
+            res = prime_math.compute_score(solution_str, ground_truth)
 
         elif reward_metric == "math_llm_judge":
             from . import math_llm_judge
-
             res = math_llm_judge.compute_score(
                 solution_str, ground_truth, extra_info=extra_info
             )
 
-        elif reward_metric == "math_verify":
-            from .orz.math_utils_sync import is_equal, solution2answer
-
-            res = is_equal(
-                solution2answer(solution_str),
-                solution2answer(str(ground_truth)),
-                math_mode="math_verify",
-            )
-        elif reward_metric == "boxed_math_verify":
-            from .orz.math_utils_sync import is_equal, solution2answer
-
-            def add_boxed(s):
-                s = str(s)
-                if "\\boxed" not in s:
-                    s = f"\\boxed{{{s}}}"
-                return s
-
-            res = is_equal(
-                add_boxed(solution2answer(solution_str)),
-                add_boxed(solution2answer(str(ground_truth))),
-                math_mode="math_verify",
-            )
-        elif reward_metric == "dapo":
+        else:
             from . import naive_dapo
             res = naive_dapo.compute_score(solution_str, ground_truth, extra_info=extra_info)
-        
-    elif data_source.startswith("simulation"):
-        from . import codeio
-        res = codeio.compute_score(solution_str, ground_truth)
-    elif data_source.startswith("tableqa"):
-        # TODO: tmp placeholder using math_verify
-        from . import tablereason
-        res = tablereason.compute_score(solution_str, ground_truth)
+    
     elif data_source.startswith('codegen'):
         from . import coder1
         res = coder1.compute_score(solution_str, ground_truth, extra_info=extra_info)
+    elif data_source.startswith("simulation__arcagi") or data_source.startswith("simulation__barc"):
+        from . import arcagi
+        res = arcagi.compute_score(solution_str, ground_truth)
+    elif data_source.startswith("simulation__codeio"):
+        from . import codeio
+        res = codeio.compute_score(solution_str, ground_truth)
+    elif data_source.startswith("simulation__cruxeval"):
+        from . import cruxeval
+        res = cruxeval.compute_score(solution_str, ground_truth)
+    elif data_source.startswith("table"):
+        # TODO: tmp placeholder using math_verify
+        from . import tablereason
+        res = tablereason.compute_score(solution_str, ground_truth)
+    elif data_source in ["zebra_puzzle_dataset"]:
+        from . import zebra_puzzle
+        res = zebra_puzzle.compute_score(solution_str, ground_truth)
     elif data_source in ['ordering_puzzle_dataset']:
         from . import puzzles_dataset
         res = puzzles_dataset.compute_score(solution_str, ground_truth)
     elif data_source in ['graph_logical_dataset']:
         from . import graph_dataset
         res = graph_dataset.compute_score(solution_str, ground_truth)
+    elif data_source in ['stem__gpqa']:
+        from . import gpqa
+        res = gpqa.compute_score(solution_str, ground_truth)
+    elif data_source in ['WebInstruct-le30'] :
+        from . import stem_llm_judge
+        res = stem_llm_judge.compute_score(data_source=data_source, model_output=solution_str, ground_truth=ground_truth, extra_info=extra_info)
+    elif data_source == "countdown":
+        from . import countdown
+        res = countdown.compute_score(solution_str, ground_truth)
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
 

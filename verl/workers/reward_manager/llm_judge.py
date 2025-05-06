@@ -22,7 +22,7 @@ from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
 
 
-async def single_compute_score(evaluation_func, data_source, solution_str, ground_truth, extra_info, reward_metric, executor, timeout=300.):
+async def single_compute_score(evaluation_func, data_source, solution_str, ground_truth, extra_info, executor, timeout=300.):
     loop = asyncio.get_running_loop()
     try:
         # Ensure process_completion is called properly
@@ -30,7 +30,7 @@ async def single_compute_score(evaluation_func, data_source, solution_str, groun
             asyncio.wait_for(
                 loop.run_in_executor(
                     executor,
-                    partial(evaluation_func, data_source, solution_str, ground_truth, extra_info, reward_metric)  # Ensure synchronous
+                    partial(evaluation_func, data_source, solution_str, ground_truth, extra_info)  # Ensure synchronous
                 ),
                 timeout=timeout)
         ]
@@ -43,12 +43,12 @@ async def single_compute_score(evaluation_func, data_source, solution_str, groun
         return None  # Default value for failed rows
 
 
-async def parallel_compute_score_async(evaluation_func, data_sources, solution_strs, ground_truths, extra_infos, reward_metric, num_processes=64):
+async def parallel_compute_score_async(evaluation_func, data_sources, solution_strs, ground_truths, extra_infos, num_processes=64):
     scores = []
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
         # Create tasks for all rows
         tasks_async = [
-            single_compute_score(evaluation_func, data_source, solution_str, ground_truth, extra_info, reward_metric, executor, timeout=300.)
+            single_compute_score(evaluation_func, data_source, solution_str, ground_truth, extra_info, executor, timeout=300.)
             for data_source, solution_str, ground_truth, extra_info in zip(data_sources, solution_strs, ground_truths, extra_infos)
         ]
         # to prevent very occasional starvation caused by some anomalous programs ( like infinite loop ), the exceptions in async programs will instantly halt the evaluation, and all summoned processes will be killed.
@@ -79,11 +79,10 @@ class LLMJudgeRewardManager:
     The Reward Manager used in https://github.com/PRIME-RL/PRIME
     """
 
-    def __init__(self, tokenizer, num_examine, compute_score=None, reward_metric=None) -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
-        self.reward_metric = reward_metric
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -117,7 +116,6 @@ class LLMJudgeRewardManager:
                                              solution_strs,
                                              ground_truths,
                                              extra_infos,
-                                             self.reward_metric,
                                              num_processes=64))
         except asyncio.TimeoutError as e:
             print('Global timeout in reward computing! Setting all as 0.')

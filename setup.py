@@ -30,6 +30,7 @@ install_requires = [
   'math-verify',
   'numpy',
   'pandas',
+  'polars',
   'peft',
   'pyarrow>=15.0.0',
   'pybind11',

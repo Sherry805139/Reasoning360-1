@@ -156,6 +156,7 @@ class TaskRunner:
         elif reward_manager_name == "naive_parallel":
             from verl.workers.reward_manager import NaiveParallelRewardManager
             reward_manager_cls = NaiveParallelRewardManager
+        # NOTE: added by Reasoning360
         elif reward_manager_name == "llm_judge":
             from verl.workers.reward_manager import LLMJudgeRewardManager
             reward_manager_cls = LLMJudgeRewardManager
@@ -170,8 +171,6 @@ class TaskRunner:
             reward_fn_key=config.data.reward_fn_key,
             max_resp_len=config.data.max_response_length,
             overlong_buffer_cfg=config.reward_model.overlong_buffer,
-            # NOTE: added by Reasoning360
-            reward_metric=config.reward_model.get("reward_metric", None),
         )
 
         # Note that we always use function-based RM for validation
@@ -182,8 +181,6 @@ class TaskRunner:
             reward_fn_key=config.data.reward_fn_key,
             max_resp_len=config.data.max_response_length,
             overlong_buffer_cfg=config.reward_model.overlong_buffer,
-            # NOTE: added by Reasoning360
-            reward_metric=config.reward_model.get("reward_metric", None),
         )
 
         resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)

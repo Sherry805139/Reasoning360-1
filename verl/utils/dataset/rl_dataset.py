@@ -138,9 +138,27 @@ class RLHFDataset(Dataset):
 
     def _read_files_and_tokenize(self):
         dataframes = []
+        # for parquet_file in self.parquet_files:
+        #     # read parquet files and cache
+        #     # Use pyarrow.parquet directly with to_pandas() to handle nested structures
+        #     import polars as pl
+        #     df = pl.read_parquet(parquet_file)
+            
+        #     dataframes.append(df)
+        #     print(f"[DEBUG] df.columns: {df.columns}")
+        # if len(dataframes) > 1:
+        #     self.dataframe = pl.concat(dataframes).to_pandas()
+        # else:
+        #     self.dataframe = dataframes[0].to_pandas()
         for parquet_file in self.parquet_files:
             # read parquet files and cache
-            dataframe = pd.read_parquet(parquet_file)
+            try:
+                dataframe = pd.read_parquet(parquet_file)
+            except Exception as e:
+                # if pandas fails (most likely due to nested columns), use polars
+                # NOTE: added by Reasoning360
+                import polars as pl
+                dataframe = pl.read_parquet(parquet_file).to_pandas()
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)
 

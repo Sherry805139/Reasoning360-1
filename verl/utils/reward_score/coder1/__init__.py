@@ -11,8 +11,9 @@ import numpy as np
 from .utils import _ERROR_MSG_PREFIX
 
 _MAX_CHAR_DISPLAY = 2048
-# CODER1_EXEC = os.environ.get("CODER1_EXEC", "firejail")
-CODER1_EXEC = os.environ.get("CODER1_EXEC", "bwrap")
+
+# CODER1_EXEC = os.environ.get("CODER1_EXEC", "bwrap")
+CODER1_EXEC = os.environ.get("CODER1_EXEC", "unsafe_local")
 
 if CODER1_EXEC == "docker":
     from .docker_exec import code_exec_docker
@@ -50,13 +51,13 @@ def remote_check_stdio(code, stdin, stdout):
     return succ, output, stdin, stdout
 
 
-def validate_response_structure(processed_str: str) -> bool:
-    pattern = re.compile(r".*</think>.*", re.DOTALL)
-    return bool(pattern.search(processed_str.strip()))
+# def validate_response_structure(processed_str: str) -> bool:
+#     pattern = re.compile(r".*</think>.*", re.DOTALL)
+#     return bool(pattern.search(processed_str.strip()))
 
 
 def try_extract_solution(solution_str: str) -> str:
-    match = re.search(ANSWER_PATTERN, solution_str, re.DOTALL)
+    match = re.search(ANSWER_PATTERN, solution_str)
     
     if match:
         return match.group(1).strip()
@@ -70,7 +71,7 @@ def extract_code_from_string(solution_str):
     return "\n".join(code_blocks).strip()
 
 
-def fuzzy_equal(actual: str, expected: str, tolerance: float = 1e-6) -> bool:
+def fuzzy_equal(actual: str, expected: str, tolerance: float = 1e-6, verbose=True) -> bool:
     """
     Compare two outputs line by line and element by element for approximate equality.
     Handles:
@@ -152,7 +153,7 @@ def fuzzy_equal(actual: str, expected: str, tolerance: float = 1e-6) -> bool:
                 return False
     
     # Output fuzzy match information if any occurred
-    if fuzzy_match_reasons:
+    if fuzzy_match_reasons and verbose:
         print(f"🔍 FUZZY MATCH - Outputs approximately equal:")
         print(f"  Expected: {repr(original_expected)}")
         print(f"  Actual:   {repr(original_actual)}")
@@ -169,7 +170,7 @@ def _compute_score(
     reward_log = []
 
     # ground_truth is not code, but tests
-    pass_fmt = validate_response_structure(solution_str)
+    # pass_fmt = validate_response_structure(solution_str)
     solution_code = extract_code_from_string(solution_str)
 
     # NameError: name 'List' is not defined. Did you mean: 'list'?
@@ -177,7 +178,8 @@ def _compute_score(
     # reference solutions fail due to imports not being present
 
     if (
-        not pass_fmt or len(solution_code) == 0
+        # not pass_fmt or len(solution_code) == 0
+        len(solution_code) == 0
     ):  # only print full output when there is an error
         reward_log.append("-" * 16 + "Bad format detected!" + "-" * 16)
         reward_log.append("-" * 16 + "Original Model Output" + "-" * 16)
@@ -192,7 +194,7 @@ def _compute_score(
 
     # log code
     if "functional" in ground_truth:
-        if "predfx" in extra_info and extra_info["prefix"] != None:
+        if "prefix" in extra_info and extra_info["prefix"] != None:
             solution_code = extra_info["prefix"] + "\n" + solution_code
         reward_log.append(solution_code + "\n" + ground_truth["functional"])
     else:
@@ -204,7 +206,7 @@ def _compute_score(
         or "solution_file" in ground_truth
     ):
         if "functional" in ground_truth:
-            if "predfx" in extra_info and extra_info["prefix"] != None:
+            if "prefix" in extra_info and extra_info["prefix"] != None:
                 solution_code = extra_info["prefix"] + "\n" + solution_code
             succ, output = code_exec(solution_code + "\n" + ground_truth["functional"])
         elif "solution_file" in ground_truth:
@@ -214,14 +216,14 @@ def _compute_score(
         else:  # pytest
             succ, output = code_exec(solution_code, pytest=ground_truth["pytest"])
         if not succ:
-            reward_log.append(
-                "!" * 16
-                + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s"
-                + "!" * 16
-            )
-            reward_log.append(output[:_MAX_CHAR_DISPLAY])
-            reward_log.append("-" * 16 + "Failed Prompt" + "-" * 16)
-            reward_log.append(extra_info["prompt"].replace("\n\n", "\n"))
+            # reward_log.append(
+            #     "!" * 16
+            #     + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s"
+            #     + "!" * 16
+            # )
+            # reward_log.append(output[:_MAX_CHAR_DISPLAY])
+            # reward_log.append("-" * 16 + "Failed Prompt" + "-" * 16)
+            # reward_log.append(extra_info["original_prompt"].replace("\n\n", "\n"))
             return format_reward, "\n".join(reward_log)
     elif "inputs" in ground_truth and "outputs" in ground_truth:
         stdin_list: str = ground_truth["inputs"]
@@ -240,18 +242,18 @@ def _compute_score(
                 succ, output, stdin, stdout = future.result()
                 if not succ or not fuzzy_equal(output.strip(), stdout.strip()):
                     output = output[:_MAX_CHAR_DISPLAY]  # truncate output to print
-                    reward_log.append(
-                        "!" * 16
-                        + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s"
-                        + "!" * 16
-                    )
-                    reward_log.append(f"🔎Input: {repr(stdin)}")
-                    reward_log.append(f"✅Expected: {repr(stdout.strip())}")
-                    reward_log.append(
-                        f"❌Actual: {output if output.startswith(_ERROR_MSG_PREFIX) else repr(output.strip())}"
-                    )
-                    reward_log.append("-" * 16 + "Failed Prompt" + "-" * 16)
-                    reward_log.append(extra_info["prompt"].replace("\n\n", "\n"))
+                    # reward_log.append(
+                    #     "!" * 16
+                    #     + f"⚠️ Test Execution Failed in {time.time() - t_start:.1f}s"
+                    #     + "!" * 16
+                    # )
+                    # reward_log.append(f"🔎Input: {repr(stdin)}")
+                    # reward_log.append(f"✅Expected: {repr(stdout.strip())}")
+                    # reward_log.append(
+                    #     f"❌Actual: {output if output.startswith(_ERROR_MSG_PREFIX) else repr(output.strip())}"
+                    # )
+                    # reward_log.append("-" * 16 + "Failed Prompt" + "-" * 16)
+                    # reward_log.append(extra_info["original_prompt"].replace("\n\n", "\n"))
                     return format_reward, "\n".join(reward_log)
     else:
         raise ValueError(
@@ -287,4 +289,4 @@ def compute_score(
         + f"Final Rward = {score}"
         + marker * 16
     )
-    return score
+    return {"score": score, "acc": score}

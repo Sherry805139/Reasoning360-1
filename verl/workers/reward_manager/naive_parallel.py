@@ -10,7 +10,6 @@ class NaiveParallelRewardManager:
         self.tokenizer = tokenizer
         self.num_examine = num_examine
         self.compute_score = compute_score or _default_compute_score
-        self.reward_metric = kwargs.get("reward_metric", None)
 
     def __call__(self, data: DataProto):
 
@@ -48,7 +47,6 @@ class NaiveParallelRewardManager:
                 solution_str=sequences_str,
                 ground_truth=ground_truth,
                 extra_info=extra_info,
-                reward_metric=self.reward_metric,
             )
             position = valid_response_length - 1
 

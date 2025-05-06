@@ -18,6 +18,7 @@ temp_job_scripts/
 SLURM_Logs/
 sgl_job_ids.txt
 dedup_results/
+model_filtering/diff_filter_output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -146,9 +147,15 @@ backup/
 
 # data
 data
+diff_filter_output/
 
 # docker
 docker/images/
 
 # untracked files
-*.txt
+./*.txt
+
+# toolkits
+toolkits/
+ray_logs/
+SDSB/

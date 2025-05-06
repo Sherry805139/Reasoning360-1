@@ -136,7 +136,6 @@ reward_model:
   micro_batch_size_per_gpu: null
   use_dynamic_bsz: ${critic.use_dynamic_bsz}
   max_length: null
-  reward_metric: null
 
 algorithm:
   gamma: 1.0

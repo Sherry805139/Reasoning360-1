@@ -415,7 +415,8 @@ def compute_score(model_output: str, ground_truth: str) -> bool:
 
     # grade simple algebra questions. if succeeded, return; otherwise, proceed to more complex grading
     if grade_answer(extracted_model_output, ground_truth):
-        return True, True, extracted_model_output
+        # return True, True, extracted_model_output
+        return {'score': 1, 'acc': 1}
 
     try:
         if "\\pi" in extracted_model_output or "\\pi" in ground_truth:
@@ -428,4 +429,5 @@ def compute_score(model_output: str, ground_truth: str) -> bool:
     except:
         is_correct = False
 
-    return is_correct, format_correctness, extracted_model_output
+    # return is_correct, format_correctness, extracted_model_output
+    return {'score': is_correct, 'acc': is_correct}
