@@ -77,12 +77,17 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
         print(f"Target: {target} | Numbers: {numbers}")
         print(f"Extracted equation: {equation}")
         print(f"Solution string: {solution_str}")
+        print(f"Valid equation?: {validate_equation(equation, numbers)}")
+        print(f"Evaluated equation: {evaluate_equation(equation)}")
+        print(f"--------------------------------")
 
     if equation is None:
         if do_print:
             print(f"No equation found")
         reward = -1.0 # We want the full negative value here
         format_reward = 0.0
+        correct = False
+        result = None
     else:
         reward = 0.0
         format_reward = format_score
@@ -94,7 +99,7 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
             correct = False
         
         else:
-
+            correct = False
             try:
                 result = evaluate_equation(equation)
                 if result is None:
@@ -111,7 +116,7 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
                     if do_print:
                         print(f"Wrong result: equation = {result}, target={target}")
                     reward = -1.0  # TWK NOTE: A slight variation here, we want to penalize an incorrect answer ?
-                    correct = False
+
             except:
                 if do_print:
                     print(f"Error evaluating function")
@@ -119,10 +124,15 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
                     correct = False
                     reward = 0.0
 
-        # TWK NOTE: another slight variation here... Returning a dict... Combining accuarcy and format rewards
-        return {
-            "score": reward + format_reward,
-            "format_reward": format_reward,
-            "acc": correct,
-            "pred": f"{equation} = {result}"
-        }
+    # TWK NOTE: another slight variation here... Returning a dict... Combining accuarcy and format rewards
+    return_dict = {
+        "score": reward + format_reward,
+        "format_reward": format_reward,
+        "acc": correct,
+    }
+    try:
+        return_dict["pred"] = f"{equation} = {result}"
+    except:
+        return_dict["pred"] = "'result' or 'equation' is not available'"
+    
+    return return_dict

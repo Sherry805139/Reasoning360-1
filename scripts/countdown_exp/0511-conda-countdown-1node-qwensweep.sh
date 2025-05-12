@@ -53,8 +53,13 @@ countdown_test_path=${DATA_DIR}/countdown/test.parquet
 train_files="['$countdown_train_path']"
 test_files="['$countdown_test_path']"
 # BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+# BASE_MODEL=Qwen/Qwen2.5-0.5B
+# BASE_MODEL=Qwen/Qwen2.5-1.5B
+# BASE_MODEL=Qwen/Qwen2.5-Math-1.5B
 # BASE_MODEL=Qwen/Qwen2.5-3B
-BASE_MODEL=Qwen/Qwen2.5-1.5B
+# BASE_MODEL=Qwen/Qwen3-0.6B
+# BASE_MODEL=Qwen/Qwen3-1.7B
+BASE_MODEL=Qwen/Qwen3-4B
 
 adv_estimator=grpo
 
