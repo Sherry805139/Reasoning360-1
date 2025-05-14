@@ -53,13 +53,13 @@ countdown_test_path=${DATA_DIR}/countdown/test.parquet
 train_files="['$countdown_train_path']"
 test_files="['$countdown_test_path']"
 # BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-# BASE_MODEL=Qwen/Qwen2.5-0.5B
+BASE_MODEL=Qwen/Qwen2.5-0.5B
 # BASE_MODEL=Qwen/Qwen2.5-1.5B
 # BASE_MODEL=Qwen/Qwen2.5-Math-1.5B
 # BASE_MODEL=Qwen/Qwen2.5-3B
 # BASE_MODEL=Qwen/Qwen3-0.6B
 # BASE_MODEL=Qwen/Qwen3-1.7B
-BASE_MODEL=Qwen/Qwen3-4B
+# BASE_MODEL=Qwen/Qwen3-4B
 
 adv_estimator=grpo
 
@@ -71,8 +71,8 @@ kl_loss_coef=0.0
 clip_ratio_low=0.2
 clip_ratio_high=0.2
 
-max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 8))
+max_prompt_length=256
+max_response_length=1024
 enable_overlong_buffer=False
 overlong_buffer_len=0
 overlong_penalty_factor=0.0
@@ -82,10 +82,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=True
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=512
+train_prompt_bsz=256
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=64
-train_prompt_mini_bsz=32
+n_resp_per_prompt=32
+train_prompt_mini_bsz=64
 
 # Algorithm
 temperature=1.0
@@ -95,8 +95,8 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 # Mathematically equivalent
 sp_size=1
 gen_tp=2
-infer_micro_batch_size=null
-train_micro_batch_size=null
+infer_micro_batch_size=4
+train_micro_batch_size=8
 use_dynamic_bsz=True
 actor_ppo_max_token_len=$((max_prompt_length + max_response_length))
 infer_ppo_max_token_len=$((max_prompt_length + max_response_length))
@@ -104,7 +104,8 @@ offload=True
 
 
 WANDB_PROJECT=TinyZero
-WANDB_EXPERIMENT_NAME=taylor-countdown-grpo-${BASE_MODEL##*/}-${SLURM_JOB_ID}
+WANDB_EXPERIMENT_NAME=taylor-countdown++-grpo-${BASE_MODEL##*/}-${SLURM_JOB_ID}
+# WANDB_EXPERIMENT_NAME=taylor-countdown++-grpo-${BASE_MODEL##*/}-12088
 
 # Remove existing Ray cluster
 srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 rm -rf /tmp/ray/ray_current_cluster
@@ -210,3 +211,5 @@ done
     trainer.total_epochs=15 \
     trainer.val_generations_to_log_to_wandb=10 \
     trainer.resume_mode=auto
+    # trainer.resume_from_path=${WORKING_DIR}/checkpoints/TinyZero/taylor-countdown+-grpo-Qwen2.5-0.5B-12088/
+    

@@ -7,19 +7,37 @@ import operator
 def extract_solution(solution_str):
     """Extract the equation from the solution string."""
     # Remove everything before the first "Assistant:"
-    if "Assistant:" in solution_str:
-        solution_str = solution_str.split("Assistant:", 1)[1]
-    elif "<|im_start|>assistant" in solution_str:
-        solution_str = solution_str.split("<|im_start|>assistant", 1)[1]
-    else:
+    # TWK NOTE: Not all solutions have this so we needlessly return None for a lot of cases
+    # if "Assistant:" in solution_str:
+    #     solution_str = solution_str.split("Assistant:", 1)[1]
+    # elif "<|im_start|>assistant" in solution_str:
+    #     solution_str = solution_str.split("<|im_start|>assistant", 1)[1]
+    # elif "<think>" in solution_str:
+    #     solution_str = solution_str.split("<think>", 1)[1]
+    # else:
+    #     return None
+    # TWK NOTE: Gets tripped up by string ending with a newline after the <answer> tag
+    # solution_str = solution_str.split('\n')[-1] 
+    if "<answer>" not in solution_str:
+        # If there is no <answer> tag, return None
         return None
-    solution_str = solution_str.split('\n')[-1]
 
+    # TWK NOTE: Jump straight to extracting the answer 
     answer_pattern = r'<answer>(.*?)</answer>'
     match = re.finditer(answer_pattern, solution_str)
     matches = list(match)
     if matches:
-        final_answer = matches[-1].group(1).strip()
+        solution = matches[-1].group(1).strip()
+        sol_parts = solution.split('=')
+        if len(sol_parts) > 1:
+            # If there are multiple parts, take the longest one
+            #  this is in place to try and extract the equation which 
+            #  will always be longer than the result
+            sol_parts = sorted(sol_parts, key=len, reverse=True)
+            # Remove any leading or trailing whitespace
+            final_answer = sol_parts[0].strip()
+        else:
+            final_answer = solution
     else:
         final_answer = None
     return final_answer
