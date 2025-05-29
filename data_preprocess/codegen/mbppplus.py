@@ -85,7 +85,7 @@ def make_map_fn(split: str, data_source: str) -> callable:
                 "task_id": str(example.get("task_id", "")),
             },
         }
-        
+        print(f'data source is {data['data_source']}')
         if idx == 0 or idx == 1:
             print("\n" + "=" * 10 + f"{data_source} {split} {idx}" + "=" * 10)
             print(data)

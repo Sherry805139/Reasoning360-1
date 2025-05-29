@@ -39,9 +39,13 @@ def make_map_fn(split: str, data_source: str) -> callable:
         query = question + '\n' + options + '\n'
         
         # prompt format is adopted from "General Reasoner" in https://github.com/TIGER-AI-Lab/General-Reasoner/blob/main/evaluation/eval_supergpqa.py
+        # prompt = (
+        #     f"{query}"
+        #     "Please reason step by step, and put your final answer option within \\boxed{}. Only put the letter in the box, e.g. \\boxed{A}. There is only one correct answer."
+        # )
         prompt = (
-            f"{query}"
-            "Please reason step by step, and put your final answer option within \\boxed{}. Only put the letter in the box, e.g. \\boxed{A}. There is only one correct answer."
+            f"Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering."
+            f"\n{query}"
         )
 
         

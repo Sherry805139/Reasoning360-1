@@ -87,7 +87,7 @@ def make_map_fn(split: str, data_source: str) -> callable:
                 "task_id": task_id,
             },
         }
-        
+        print(f'data_source is {data['data_source']}')
         if idx == 0 or idx == 1:
             print("\n" + "=" * 10 + f"{data_source} {split} {idx}" + "=" * 10)
             print(data)
@@ -133,13 +133,13 @@ if __name__ == '__main__':
     dataset = dataset.filter(lambda x: x["data_source"] == data_source)
     print(f"[DEBUG] filtered dataset: {len(dataset)}")
     # Length filter
-    try:
-        tokenizer = transformers.AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B")
-        length_filter = LengthFilter(tokenizer=tokenizer, max_length=4096)
-        dataset = dataset.filter(lambda x: length_filter.check(x))
-    except Exception as e:
-        print(f"Warning: Could not perform length filtering. Error: {e}")
-        print("Proceeding without length filtering.")
+    # try:
+    #     tokenizer = transformers.AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B")
+    #     length_filter = LengthFilter(tokenizer=tokenizer, max_length=4096)
+    #     dataset = dataset.filter(lambda x: length_filter.check(x))
+    # except Exception as e:
+    #     print(f"Warning: Could not perform length filtering. Error: {e}")
+    #     print("Proceeding without length filtering.")
 
     # Sample the dataset
     dataset = sample_dataset(dataset, args.sample_size)

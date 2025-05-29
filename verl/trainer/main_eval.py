@@ -51,7 +51,7 @@ def select_reward_fn(data_source):
     elif data_source.startswith("table"):
         return tablereason.compute_score
     # math
-    elif data_source in ["math__aime_repeated_8x", "math__math", "math__olympiad_bench", "math__aime2025_repeated_8x"]:
+    elif data_source in ["math__aime_repeated_8x", "math__aime", "math__math", "math__olympiad_bench", "math__aime2025_repeated_8x", "math__aime2025"]:
         return naive_dapo.compute_score
     # code gen
     elif data_source in [
@@ -62,12 +62,12 @@ def select_reward_fn(data_source):
         "codegen__livecodebench",
     ]:
         return coder1.compute_score
-    elif data_source in ['stem__gpqa', 'stem__gpqa_diamond']:
-        return supergpqa.compute_score
-    elif data_source in ['stem__gpqa_diamond_no_box']:
+    elif data_source in ['stem__gpqa', 'stem__gpqa_diamond', "stem__supergpqa"]:
         return gpqa.compute_score
-    elif data_source == "stem__supergpqa":
-        return supergpqa.compute_score
+    # elif data_source in ['stem__gpqa_diamond_no_box']:
+    #     return gpqa.compute_score
+    # elif data_source == "stem__supergpqa":
+    #     return supergpqa.compute_score
     elif data_source in ["simulation__arcagi1", "simulation__barc"]:
         return arcagi.compute_score
     elif data_source in ["ood__ifeval"]:

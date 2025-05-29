@@ -28,11 +28,13 @@ def get_datasets(cache_dir: str):
     train_data_source = "SDSB/merged_deduped_dapo_or1_dataset"
     test_data_sources = [
         "nanoverl/minerva",
-        "SDSB/aime_repeated_8x",
+        # "SDSB/aime_repeated_8x",
+        "nanoverl/aime",
         "SDSB/amc_repeated_4x",
         "nanoverl/olympiad_bench",
         "nanoverl/math",
-        "nanoverl/aime2025_repeated_8x",
+        # "nanoverl/aime2025_repeated_8x",
+        "nanoverl/aime2025",
     ]
 
     print(f"Loading the {train_data_source} dataset...")

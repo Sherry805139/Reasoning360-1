@@ -18,7 +18,7 @@ def code_exec_local(
     timeout=30,
     pytest: str = None,
     solution: str = None,
-    python_env: str = os.environ.get("CONDA_BIN_PATH", None),
+    python_env: str = os.environ.get("CONDA_PREFIX", None),
 ):
     env = os.environ.copy()
     env["OPENBLAS_NUM_THREADS"] = "1"
@@ -28,7 +28,7 @@ def code_exec_local(
     if python_env is None:
         python_executable = "/usr/bin/python3"
     else:
-        python_executable = os.path.join(python_env, "python3")
+        python_executable = os.path.join(python_env, "bin", "python")
 
     if solution:
         with TemporaryDirectory() as tmpdir:
