@@ -3,13 +3,15 @@
 
 # leaderboard list (the name should match the test file name)
 leaderboard_list=(
-  "aime"           # math
+  # "amc"           # math
+  # "aime"           # math
   # "math"           # math
   # "olympiad_bench" # math
   # "humaneval"      # codegen
   # "mbpp"           # codegen
   # "livecodebench"  # codegen
   # "gpqa"           # stem
+  "supergpqa"        # stem
 )
 
 # gpu
@@ -71,7 +73,9 @@ domain_mappings["aime"]="math"
 domain_mappings["math"]="math"
 domain_mappings["minerva"]="math"
 domain_mappings["olympiad_bench"]="math"
+domain_mappings["amc"]="math"
 domain_mappings["gpqa"]="stem"
+domain_mappings["supergpqa"]="stem"
 
 # Initialize counters for total time
 total_gen_time=0
