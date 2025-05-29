@@ -27,7 +27,7 @@ temp_list=(
 
 benchmark_list=(
     "gpqa_diamond.sh"
-    "gpqa.sh"
+    # "gpqa.sh"
     "supergpqa.sh"
 )
 

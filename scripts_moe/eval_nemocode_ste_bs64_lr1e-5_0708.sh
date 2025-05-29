@@ -3,12 +3,12 @@
 cd ..
 
 # Define single variables (not lists)
-train_data="s1"
-method="full"
+train_data="nemocode"
+method="ste"
 
 # Define lists of variables to iterate through
 bs_list=(
-    "bs16"
+    "bs64"
     # "bs32"
 )
 
@@ -26,11 +26,11 @@ temp_list=(
 )
 
 benchmark_list=(
-    # "olympiad_bench.sh"
-    # "math500.sh"
-    "aime2024.sh"
-    "aime2025.sh"
-    "amc.sh"
+    "humaneval.sh"
+    "humanevalplus.sh"
+    "mbpp.sh"
+    "mbppplus.sh"
+    "livecodebench.sh"
 )
 
 # Counter for tracking experiments

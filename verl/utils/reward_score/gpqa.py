@@ -29,8 +29,8 @@ def extract_solution(solution_str, method='strict'):
     assert method in ['strict', 'flexible']
 
     if method == 'strict':
-        # Use regex from OpenAI simple-eval https://github.com/openai/simple-evals/blob/main/gpqa_eval.py
-        solution = re.search(r"(?i)Answer[ \t]*:[ \t]*\$?([A-D])\$?", solution_str)
+        # Look for the exact format "The correct answer is (X)"
+        solution = re.search(r"The answer is \(([A-D])\)", solution_str)
         if solution is None:
             final_answer = None
         else:
@@ -49,6 +49,41 @@ def extract_solution(solution_str, method='strict'):
                     break
     
     return final_answer
+
+# def extract_solution(solution_str, method='strict'):
+#     """
+#     Extract the final answer choice from an LLM's response to a multiple-choice GPQA question.
+    
+#     Args:
+#         solution_str (str): The full text response from the LLM
+#         method (str): 'strict' for exact format matching, 'flexible' for more lenient matching
+        
+#     Returns:
+#         str: The extracted answer choice (A, B, C, or D) or None if not found
+#     """
+#     assert method in ['strict', 'flexible']
+
+#     if method == 'strict':
+#         # Use regex from OpenAI simple-eval https://github.com/openai/simple-evals/blob/main/gpqa_eval.py
+#         solution = re.search(r"(?i)Answer[ \t]*:[ \t]*\$?([A-D])\$?", solution_str)
+#         if solution is None:
+#             final_answer = None
+#         else:
+#             final_answer = solution.group(1)
+#     elif method == 'flexible':
+#         answer = re.findall(r"\(([A-D])\)", solution_str)
+#         final_answer = None
+#         if len(answer) == 0:
+#             # No answer choices found in parentheses
+#             pass
+#         else:
+#             invalid_str = ['']
+#             # Find the last letter that is a valid answer choice
+#             for final_answer in reversed(answer):
+#                 if final_answer not in invalid_str:
+#                     break
+    
+#     return final_answer
 
 
 def compute_score(solution_str, ground_truth, method='strict', format_score=0., score=1., extra_info=None):

@@ -43,9 +43,14 @@ def make_map_fn(split: str, data_source: str) -> callable:
         #     f"{query}"
         #     "Please reason step by step, and put your final answer option within \\boxed{}. Only put the letter in the box, e.g. \\boxed{A}. There is only one correct answer."
         # )
+        # prompt = (
+        #     f"Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering."
+        #     f"\n{query}"
+        # )
+        # prompt format is adopted from "Zero-shot CoT Prompt" in https://www.vals.ai/benchmarks/gpqa-04-18-2025
         prompt = (
-            f"Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering."
-            f"\n{query}"
+            f"What is the correct answer to this question:\n\n{query}\n\n"
+            "Reason through your answer step-by-step. Then, based on your reasoning, provide the single most likely answer choice. Answer in the format \"The answer is (insert answer here).\""
         )
 
         

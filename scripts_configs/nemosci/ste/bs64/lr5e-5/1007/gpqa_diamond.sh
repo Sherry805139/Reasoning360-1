@@ -27,7 +27,7 @@ model_path=fengyao1909/ste_nemosci_sl16k_bs64_lr5e-5_ckpt471
 model_name="ste_nemosci_sl16k_bs64_lr5e-5_ckpt471_1007"  # this will be the folder name under the save_folder
 
 # generation hyper-parameters
-n_samples=1
+n_samples=32
 batch_size=128
 temperature=1.0
 top_k=-1 # 0 for hf rollout, -1 for vllm rollout

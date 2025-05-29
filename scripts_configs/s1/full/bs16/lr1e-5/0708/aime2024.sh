@@ -26,14 +26,14 @@ model_path=fengyao1909/full_s1_sl16k_bs16_lr1e-5_ckpt285
 model_name="full_s1_sl16k_bs16_lr1e-5_ckpt285_0708"  # this will be the folder name under the save_folder
 
 # generation hyper-parameters
-n_samples=1
+n_samples=32
 batch_size=128
 temperature=0.7
 top_k=-1 # 0 for hf rollout, -1 for vllm rollout
 top_p=0.8
 prompt_length=1024
 response_length=31744  # 32768 - 1024, Qwen3-moe only has 32768 max len
-max_num_batched_tokens=1048576 #786432
+max_num_batched_tokens=65536  #786432
 tensor_model_parallel_size=2
 gpu_memory_utilization=0.9
 ### ============== leadboard eval config ==============

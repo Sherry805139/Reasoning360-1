@@ -84,8 +84,15 @@ def main_task(config):
     
     # handle n_samples
     if config.data.n_samples > 1:
+        print(f'chat_lst originally is: {len(chat_lst)}')
+        print(f'ground_truth_lst originally is: {len(ground_truth_lst)}')
+        print(f'repeat is {config.data.n_samples}')
+
         chat_lst = chat_lst * config.data.n_samples
         ground_truth_lst = ground_truth_lst * config.data.n_samples
+
+        print(f'chat_lst repeated is: {len(chat_lst)}')
+        print(f'ground_truth_lst repeated is: {len(ground_truth_lst)}')
 
     tokenizer.padding_side = 'left'
     if tokenizer.pad_token is None:
@@ -96,7 +103,7 @@ def main_task(config):
     wg = RayWorkerGroup(resource_pool=resource_pool, ray_cls_with_init=ray_cls_with_init)
     wg.init_model()
 
-    total_samples = len(dataset)
+    total_samples = len(chat_lst) # len(dataset)
     # real_batch_size = data.batch['input_ids'].shape[0]
     config_batch_size = config.data.batch_size
     dispatch_dp_size = wg.world_size
