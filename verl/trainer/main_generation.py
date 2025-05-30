@@ -161,7 +161,8 @@ def main_task(config):
 
     # convert output_lst from (n_samples * n_data ,) to (n_data, n_sampels)
     original_data_size = len(dataset)
-    output_lst = np.array(output_lst).reshape(original_data_size, config.data.n_samples).tolist()
+    output_lst = np.array(output_lst).reshape(config.data.n_samples,original_data_size)
+    output_lst = output_lst.T.tolist()
 
     original_chat_lst = chat_lst[:original_data_size]
     original_ground_truth_lst = ground_truth_lst[:original_data_size]

@@ -18,15 +18,15 @@ n_gpus_per_node=8
 gpu_ids=0,1,2,3,4,5,6,7
 
 # path
-data_folder=/lustrefs/users/shibo.hao/data/feng/code/Reasoning360/data/test/
-save_folder=/lustrefs/users/shibo.hao/data/feng/code/Reasoning360/data/test_leaderboard_output/
+data_folder=./data/test/
+save_folder=./data/test_leaderboard_output/
 
 # model
 model_path=fengyao1909/full_nemocode_sl16k_bs64_lr5e-5_ckpt553
 model_name="full_nemocode_sl16k_bs64_lr5e-5_ckpt553_0708" # this will be the folder name under the save_folder
 
 # generation hyper-parameters
-n_samples=1
+n_samples=4
 batch_size=128
 temperature=0.7
 top_k=-1 # 0 for hf rollout, -1 for vllm rollout
