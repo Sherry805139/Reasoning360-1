@@ -21,8 +21,8 @@ lr_list=(
 
 temp_list=(
     "0609"
-    # "0708"
-    # "1007"
+    "0708"
+    "1007"
 )
 
 benchmark_list=(

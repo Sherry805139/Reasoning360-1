@@ -3,8 +3,8 @@
 cd ..
 
 # Define single variables (not lists)
-train_data="nemocode"
-method="full"
+train_data="nemosci"
+method="ste"
 
 # Define lists of variables to iterate through
 bs_list=(
@@ -13,24 +13,22 @@ bs_list=(
 )
 
 lr_list=(
-    # "lr1e-5"
+    "lr5e-5"
     "lr3e-5"
-    # "lr5e-5"
+    "lr1e-5"  
     # "lr5e-6"
 )
 
 temp_list=(
     "0609"
-    # "0708"
-    # "1007"
+    "0708"
+    "1007"
 )
 
 benchmark_list=(
-    "humaneval.sh"
-    "humanevalplus.sh"
-    "mbpp.sh"
-    "mbppplus.sh"
-    "livecodebench.sh"
+    "gpqa_diamond.sh"
+    # "gpqa.sh"
+    # "supergpqa.sh"
 )
 
 # Counter for tracking experiments

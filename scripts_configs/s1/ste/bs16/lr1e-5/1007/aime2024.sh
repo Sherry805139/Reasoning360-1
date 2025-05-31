@@ -33,7 +33,7 @@ top_k=-1 # 0 for hf rollout, -1 for vllm rollout
 top_p=0.7
 prompt_length=1024
 response_length=31744  # 32768 - 1024, Qwen3-moe only has 32768 max len
-max_num_batched_tokens=1048576  # 2 x context length
+max_num_batched_tokens=65536  # 2 x context length
 tensor_model_parallel_size=1
 gpu_memory_utilization=0.95
 ### ============== leadboard eval config ==============
