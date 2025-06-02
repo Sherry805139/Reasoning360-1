@@ -22,8 +22,8 @@ data_folder=./data/test/
 save_folder=./data/test_leaderboard_output/
 
 # model
-model_path=fengyao1909/full_s1_sl16k_bs32_lr5e-6_ckpt285
-model_name="full_s1_sl16k_bs32_lr5e-6_ckpt285_0708"  # this will be the folder name under the save_folder
+model_path=fengyao1909/full_s1_sl16k_bs32_lr5e-6_ckpt140
+model_name="full_s1_sl16k_bs32_lr5e-6_ckpt140_0708"  # this will be the folder name under the save_folder
 
 # generation hyper-parameters
 n_samples=32
@@ -33,7 +33,7 @@ top_k=-1 # 0 for hf rollout, -1 for vllm rollout
 top_p=0.8
 prompt_length=1024
 response_length=31744  # 32768 - 1024, Qwen3-moe only has 32768 max len
-max_num_batched_tokens=2097152  # 2 x context length
+max_num_batched_tokens=65536  # 2 x context length
 tensor_model_parallel_size=1
 gpu_memory_utilization=0.95
 ### ============== leadboard eval config ==============

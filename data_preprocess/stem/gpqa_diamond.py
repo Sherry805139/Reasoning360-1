@@ -57,22 +57,22 @@ def make_map_fn(split: str, data_source: str) -> callable:
             formatted_choices += f"({letter}) {choice}\n"
         
         # prompt format is adopted from "Zero-shot CoT Prompt" in https://www.vals.ai/benchmarks/gpqa-04-18-2025
-        prompt = (
-            f"What is the correct answer to this question:\n\n{question}\n\n"
-            f"Choices:\n{formatted_choices}\n"
-            "Reason through your answer step-by-step. Then, based on your reasoning, provide the single most likely answer choice. Answer in the format \"The answer is (insert answer here).\""
-        )
+        # prompt = (
+        #     f"What is the correct answer to this question:\n\n{question}\n\n"
+        #     f"Choices:\n{formatted_choices}\n"
+        #     "Reason through your answer step-by-step. Then, based on your reasoning, provide the single most likely answer choice. Answer in the format \"The answer is (insert answer here).\""
+        # )
         # deepseek uses OpenAI's simple-eval for GPQA-Diamond, so we adopt prompts from here: https://github.com/openai/simple-evals/blob/main/gpqa_eval.py
         # prompt = (
         #     f"Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering."
         #     f"\n{question}\n"
         #     f"{formatted_choices}"
         # )
-        # prompt = (
-        #     f"{question}\n"
-        #     f"{formatted_choices}"
-        #     "Please reason step by step, and put your final answer option within \\boxed{}. Only put the letter in the box, e.g. \\boxed{A}. There is only one correct answer."
-        # )
+        prompt = (
+            f"{question}\n"
+            f"{formatted_choices}"
+            "Please reason step by step, and put your final answer option within \\boxed{}. Only put the letter in the box, e.g. \\boxed{A}. There is only one correct answer."
+        )
 
         
         data = {

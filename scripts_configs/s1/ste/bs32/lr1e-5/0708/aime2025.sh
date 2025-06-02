@@ -23,8 +23,8 @@ data_folder=./data/test/
 save_folder=./data/test_leaderboard_output/
 
 # model
-model_path=fengyao1909/ste_s1_sl16k_bs32_lr1e-5_ckpt285
-model_name="ste_s1_sl16k_bs32_lr1e-5_ckpt285_0708"  # this will be the folder name under the save_folder
+model_path=fengyao1909/ste_s1_sl16k_bs32_lr1e-5_ckpt140
+model_name="ste_s1_sl16k_bs32_lr1e-5_ckpt140_0708"  # this will be the folder name under the save_folder
 
 # generation hyper-parameters
 n_samples=32

@@ -63,7 +63,7 @@ def select_reward_fn(data_source):
     ]:
         return coder1.compute_score
     elif data_source in ['stem__gpqa', 'stem__gpqa_diamond', "stem__supergpqa"]:
-        return gpqa.compute_score
+        return supergpqa.compute_score
     # elif data_source in ['stem__gpqa_diamond_no_box']:
     #     return gpqa.compute_score
     # elif data_source == "stem__supergpqa":
