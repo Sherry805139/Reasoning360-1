@@ -13,16 +13,16 @@ bs_list=(
 )
 
 lr_list=(
-    "lr5e-5"
+    # "lr5e-5"
     "lr3e-5"
-    "lr1e-5"
+    # "lr1e-5"
     # "lr5e-6"
 )
 
 temp_list=(
     "0609"
-    "0708"
-    "1007"
+    # "0708"
+    # "1007"
 )
 
 benchmark_list=(

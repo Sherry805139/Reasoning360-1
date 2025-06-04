@@ -63,7 +63,7 @@ def select_reward_fn(data_source):
     ]:
         return coder1.compute_score
     elif data_source in ['stem__gpqa', 'stem__gpqa_diamond', "stem__supergpqa"]:
-        return supergpqa.compute_score
+        return gpqa.compute_score
     # elif data_source in ['stem__gpqa_diamond_no_box']:
     #     return gpqa.compute_score
     # elif data_source == "stem__supergpqa":
@@ -103,6 +103,7 @@ def main(config):
 
     passes = 0
     avg_pass = 0
+    score_lst_all=[]
     k = None
 
     total = len(dataset)
@@ -124,6 +125,7 @@ def main(config):
 
         max_score = np.max(score_lst)
         avg_pass += np.mean(score_lst)
+        score_lst_all.append(score_lst)
 
         if max_score > 0:
             passes += 1
@@ -131,7 +133,7 @@ def main(config):
     print(f"pass@{k}: {passes / total * 100.0}")
     print(f"pass@1_(avg{k}): {avg_pass / total * 100.0}")
     
-    metric_output_path = config.data.path.replace(".parquet", "_metric.json")
+    metric_output_path = config.data.path.replace(".parquet", "metric_new.json")
     if os.path.exists(metric_output_path):
         with open(metric_output_path, "r") as f:
             metric_data = json.load(f)
@@ -139,6 +141,10 @@ def main(config):
         metric_data[f"pass@1_(avg{k})"] = avg_pass / total * 100.0
     else:
         metric_data = {f"pass@{k}": passes / total * 100.0, f"pass@1_(avg{k})": avg_pass / total * 100.0}
+    # 将 score_lst_all 转为 numpy 数组并计算每次测试的平均值，并写入 metric_data
+    score_array = np.array(score_lst_all)
+    metric_data["score_lst_all"] = score_lst_all
+    metric_data["avg_per_index"] = (score_array.mean(axis=0)*100.0).tolist()
     with open(metric_output_path, "w") as f:
         json.dump(metric_data, f, indent=4)
 
