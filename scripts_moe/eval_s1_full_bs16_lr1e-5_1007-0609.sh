@@ -26,10 +26,10 @@ temp_list=(
 )
 
 benchmark_list=(
-    "olympiad_bench.sh"
-    "math500.sh"
     "aime2024.sh"
     "aime2025.sh"
+    "olympiad_bench.sh"
+    "math500.sh"
     "amc.sh"
 )
 

@@ -188,7 +188,7 @@ for leaderboard in "${leaderboard_list[@]}"; do
     # Evaluation step with unbuffered output
     echo "Starting evaluation for $leaderboard at $(date)" | tee -a "$eval_log_file"
     {
-        PYTHONUNBUFFERED=1 python3 -u -m verl.trainer.main_eval_new\
+        PYTHONUNBUFFERED=1 python3 -u -m verl.trainer.main_eval\
             data.path="$save_path" \
             data.prompt_key=prompt \
             data.response_key=responses \
