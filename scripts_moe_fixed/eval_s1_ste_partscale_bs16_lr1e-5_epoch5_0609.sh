@@ -74,3 +74,49 @@ for bs in "${bs_list[@]}"; do
         done
     done
 done
+
+
+#### Patched ------------------------------
+benchmark_list=(
+    # "aime2024.sh"
+    # "aime2025.sh"
+    #  "math500.sh"
+    "amc.sh"
+    "olympiad_bench.sh"
+)
+
+# Counter for tracking experiments
+total_experiments=0
+successful_experiments=0
+failed_experiments=0
+
+# Iterate through combinations
+for bs in "${bs_list[@]}"; do
+    for lr in "${lr_list[@]}"; do
+        for epoch in "${epoch_list[@]}"; do
+            for temp in "${temp_list[@]}"; do
+                for benchmark in "${benchmark_list[@]}"; do
+                    ((total_experiments++))
+                    
+                    script_path="scripts_configs/$train_data/$method/$bs/$lr/$epoch/$temp/$benchmark"
+                    echo "[$total_experiments] Running: $script_path"
+                    
+                    if [ -f "$script_path" ]; then
+                        if bash "$script_path"; then
+                            ((successful_experiments++))
+                            echo "✅ SUCCESS: $script_path"
+                        else
+                            ((failed_experiments++))
+                            echo "❌ FAILED: $script_path"
+                        fi
+                    else
+                        ((failed_experiments++))
+                        echo "⚠️  MISSING: $script_path"
+                    fi
+                    
+                    echo "----------------------------------------"
+                done
+            done
+        done
+    done
+done
