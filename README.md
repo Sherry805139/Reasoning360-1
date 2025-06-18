@@ -16,7 +16,8 @@ This is the official repository of **Reasoning360** aiming to produce strong and
   - [RL Training](#rl-training)
     - [(1) Download data](#1-download-data)
     - [(2) \[Optional\] Customize chat template](#2-optional-customize-chat-template)
-    - [(3) Train](#3-train)
+    - [(3) \[Optional\] SandboxFusion Code Execution](#3-optional-sandboxfusion-code-execution)
+    - [(4) Train](#4-train)
   - [Evaluation](#evaluation)
   - [Contributing](#contributing)
     - [Add a new dataset for training (or evaluation)](#add-a-new-dataset-for-training-or-evaluation)
@@ -84,6 +85,61 @@ sbatch scripts/tools/serve_llm_as_verifier.sh
 Then fill in the `export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"` by the llm-as-verifier server IP. It uses one GPU node to serve a 1.5B [general-verifier](https://huggingface.co/TIGER-Lab/general-verifier) now.
 
 (TODO: build a single-node script not using slurm)
+
+---
+## SandboxFusion Code Execution
+
+SandboxFusion provides secure code execution for training and evaluation. It supports both containerized SLURM deployment and local installation.
+
+### Quick Setup
+
+**Option 1: SLURM Container (Recommended for production)**
+```bash
+# Download container
+enroot import docker://varad0309/code_sandbox:server
+
+# Deploy with SLURM
+sbatch scripts/sandbox/run_server.sbatch
+```
+
+**Option 2: Local Installation (Development only)**
+```bash
+git clone https://github.com/bytedance/SandboxFusion.git
+cd SandboxFusion
+poetry install
+make run-online
+```
+
+### Configuration
+
+Configure sandbox servers in your training script:
+
+```bash
+# Single server
+export SANDBOX_FUSION_SERVERS="fs-mbz-gpu-044"
+
+# Multiple servers (load balancing)
+export SANDBOX_FUSION_SERVERS="fs-mbz-gpu-044,fs-mbz-gpu-045"
+```
+
+Or programmatically:
+```python
+from verl.utils.reward_score.coder1.sandboxfusion_exec import code_exec_sandboxfusion
+
+# Single server
+success, output = code_exec_sandboxfusion(
+    code="print('Hello')", 
+    sandbox_servers="fs-mbz-gpu-044"
+)
+
+# Multiple servers
+success, output = code_exec_sandboxfusion(
+    code="print('Hello')", 
+    sandbox_servers=["fs-mbz-gpu-044", "fs-mbz-gpu-045"]
+)
+```
+
+For detailed setup instructions, see [`verl/utils/reward_score/coder1/README.md`](verl/utils/reward_score/coder1/README.md).
 
 ---
 ## Evaluation
