@@ -16,7 +16,6 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 """
 
 import os
-
 import hydra
 import ray
 
@@ -24,8 +23,7 @@ from .fast_dapo_ray_trainer import RayFastDAPOTrainer
 
 
 def get_custom_reward_fn(config):
-    import importlib.util
-    import os
+    import importlib.util, os
 
     reward_fn_config = config.get("custom_reward_function") or {}
     file_path = reward_fn_config.get("path")
