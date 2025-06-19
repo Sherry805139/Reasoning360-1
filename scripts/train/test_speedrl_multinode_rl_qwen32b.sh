@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=taylor-test-multinode-rl-qwen32b-base
+#SBATCH --job-name=speedrl-test-multinode-rl-qwen32b-base
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
 #SBATCH --nodes=8
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
 #SBATCH --mem=0
-#SBATCH --output=slurm/speed-rl-test-%x-%j.out
-#SBATCH --error=slurm/speed-rl-test-%x-%j.err
+#SBATCH --output=slurm/%x-%j.out
+#SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
 
@@ -89,12 +89,12 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.1k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}, ${leetcode_train_path}, ${livecodebench_train_path}, ${primeintellect_train_path}, ${taco_train_path}, \
-    ${arcagi1_train_path}, ${arcagi2_train_path}, ${barc_train_path}, ${graph_train_path}, ${ordering_train_path}, ${zebra_train_path}, \
-    ${codeio_train_path}, ${hitab_train_path}, ${multihier_train_path}']"
-test_files="['${math_test_path}, ${aime_test_path}, ${amc_test_path}, ${humaneval_test_path}, ${mbpp_test_path}, ${livecodebench_test_path}, \
-    ${zebralogic_test_path}, ${graph_test_path}, ${ordering_puzzle_test_path}, ${arcagi1_test_path}, ${codeio_test_path}, \
-    ${multihier_test_path}, ${hitab_test_path}']"
+train_files="['${math_train_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', \
+    '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${ordering_train_path}', '${zebra_train_path}', \
+    '${codeio_train_path}', '${hitab_train_path}', '${multihier_train_path}']"
+test_files="['${math_test_path}', '${aime_test_path}', '${amc_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}', \
+    '${zebralogic_test_path}', '${graph_test_path}', '${ordering_puzzle_test_path}', '${arcagi1_test_path}', '${codeio_test_path}', \
+    '${multihier_test_path}', '${hitab_test_path}']"
 
 # =================== Model ===================
 BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
@@ -256,8 +256,8 @@ val_before_train=True
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
     actor_rollout_ref.model.use_remove_padding=True \
-    +actor_rollout_ref.rollout.multi_turn.enable=False \
-    +actor_rollout_ref.rollout.mode="sync" \
+    actor_rollout_ref.rollout.multi_turn.enable=False \
+    actor_rollout_ref.rollout.mode="sync" \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
@@ -279,5 +279,6 @@ val_before_train=True
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.max_actor_ckpt_to_keep=${max_ckpt_to_keep} \
     trainer.max_critic_ckpt_to_keep=${max_ckpt_to_keep} \
+    trainer.save_metric_path=$(date +%Y%m%d_%H%M%S) \
     trainer.resume_mode=auto \
-    curriculmum.enable=${enable_curriculum}
+    curriculum.enable=${enable_curriculum}

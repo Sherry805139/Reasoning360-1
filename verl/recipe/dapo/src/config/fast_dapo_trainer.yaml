@@ -15,6 +15,7 @@ data:
 
 reward_model:
   reward_manager: dapo
+  launch_reward_fn_async: False # custom reward function executed async on CPU, during log_prob
   overlong_buffer: 
     enable: False # We try to avoid forgetting to set enable
     len: 0
@@ -35,7 +36,7 @@ trainer:
   balance_batch: True
   total_epochs: 30
   total_training_steps: null
-  project_name: verl_examples
+  project_name: verl-fast-dapo
   experiment_name: gsm8k
   logger: [ 'console', 'wandb' ]
   log_val_generations: 0
@@ -54,6 +55,8 @@ trainer:
   default_local_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}
   max_actor_ckpt_to_keep: null
   max_critic_ckpt_to_keep: null
+  save_metrics_local_dir: metrics/${trainer.project_name}/${trainer.experiment_name}
+  save_metric_path: metrics
 
 curriculum:
   enable: True

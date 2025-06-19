@@ -63,9 +63,11 @@ def run_ppo(config) -> None:
         # this is for local ray cluster
         ray.init(
             runtime_env={
-                "env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN", "VLLM_LOGGING_LEVEL": "WARN"}
-            },
-            num_cpus=16, # RZ: Edited to avoid some strange bug.
+                "env_vars": {
+                    "TOKENIZERS_PARALLELISM": "true", 
+                    "NCCL_DEBUG": "WARN", 
+                    "VLLM_LOGGING_LEVEL": "WARN"}
+            }
         )
 
     runner = TaskRunner.remote()
@@ -164,6 +166,9 @@ class TaskRunner:
             from verl.workers.reward_manager import DAPORewardManager
 
             reward_manager_cls = DAPORewardManager
+        elif reward_manager_name == 'async_dapo':
+            from verl.workers.reward_manager import AsyncDAPORewardManager
+            reward_manager_cls = AsyncDAPORewardManager
         else:
             raise NotImplementedError
 

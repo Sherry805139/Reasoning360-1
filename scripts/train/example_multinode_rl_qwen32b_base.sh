@@ -1,5 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=example-multinode-rl-qwen32b-base
+#SBATCH --job-name=taylor-test-multinode-rl-qwen32b-base
+#SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
 #SBATCH --nodes=8
 #SBATCH --ntasks=8
@@ -247,13 +248,13 @@ offload=True
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
     reward_model.overlong_buffer.penalty_factor=${overlong_penalty_factor} \
     trainer.logger=['console','wandb'] \
-    trainer.project_name=${WANDB_PROJECT}· \
+    trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=5 \
+    trainer.save_freq=1 \
     trainer.test_freq=5 \
     trainer.total_epochs=5 \
     +trainer.val_generations_to_log_to_wandb=30 \
