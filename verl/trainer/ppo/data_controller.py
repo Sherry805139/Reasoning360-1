@@ -172,7 +172,7 @@ class DataController:
             batch_keys=["input_ids", "attention_mask", "position_ids"],
             non_tensor_batch_keys=[key for key in batch.non_tensor_batch.keys() if key not in ['score', 'acc', 'reward']],
             meta_info_keys=None
-        ).truncate(start=0, end=self.max_prompt_length) # DataProto. But only have the prompt part. No responses.
+        ).slice(start=0, end=self.max_prompt_length) # DataProto. But only have the prompt part. No responses.
 
         self.prompts_for_second_generation_phase = qualified_prompts_after_first_phase if self.prompts_for_second_generation_phase is None else DataProto.concat([self.prompts_for_second_generation_phase, qualified_prompts_after_first_phase])
 
