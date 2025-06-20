@@ -513,6 +513,31 @@ class DataProto:
         # Return a new DataProto object
         return type(self)(batch=sliced_batch, non_tensor_batch=sliced_non_tensor, meta_info=self.meta_info)
 
+    def truncate(self, start=None, end=None):
+        """
+        Truncate the batch data at the specified start and end indices.
+
+        Args:
+            start (int, optional): Start index. Defaults to None (start from beginning).    
+            end (int, optional): End index. Defaults to None (end at the end).
+
+        Returns:
+            DataProto: A new DataProto with truncated data.
+        """
+        slice_obj = slice(start, end)
+        # Only Handle the batch data
+        if self.batch is not None:
+            sliced_batch = TensorDict(
+                source={key: tensor[:,slice_obj] for key, tensor in self.batch.items()},
+                batch_size=(self.batch.batch_size[0],),
+            )
+        else:
+            sliced_batch = None
+
+        # Return a new DataProto object
+        return DataProto(batch=sliced_batch, non_tensor_batch=self.non_tensor_batch, meta_info=self.meta_info)
+
+    
     def pop(self, batch_keys=None, non_tensor_batch_keys=None, meta_info_keys=None) -> "DataProto":
         """Pop a subset of the DataProto via `batch_keys` and `meta_info_keys`
 

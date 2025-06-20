@@ -43,58 +43,94 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=/mnt/sharefs/users/zhuojun.cheng
-TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru18k
-TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online
+TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru92k_release_0603
+TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online 
 
-# Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_3.1k.parquet
-# Math (test)
+# ---------- Math ----------
+# train
+math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet
+# test
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
 amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
-# Code (train)
-leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_216.parquet
-livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_75.parquet
-primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_1.3k.parquet
-taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_1.5k.parquet
-# Code (test)
+
+# ---------- Code ----------
+# train
+leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_1.3k.parquet
+livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_440.parquet
+primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_7.5k.parquet
+taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_8.8k.parquet
+# test (unchanged)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
 mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500_sampled_200.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
-# Logic (train)
-arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_54.parquet
-arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_93.parquet
-barc_train_path=${TRAIN_DATA_DIR}/logic__barc_765.parquet
-graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_605.parquet
-ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_918.parquet
-zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_637.parquet
-# Logic (test)
+
+# ---------- Logic ----------
+# train
+arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_111.parquet
+arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_190.parquet
+barc_train_path=${TRAIN_DATA_DIR}/logic__barc_1.6k.parquet
+graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_1.2k.parquet
+ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_1.9k.parquet
+zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_1.3k.parquet
+# test (unchanged)
 zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300_sampled_200.parquet
 graph_test_path=${TEST_DATA_DIR}/logic__graph_logical_dataset_150_sampled_77.parquet
 ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150_sampled_100.parquet
 arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
-# Simulation (train)
-codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k_3.1k.parquet
-# Simulation (test)
+
+# ---------- Simulation ----------
+# train
+codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k_3.7k.parquet
+# test (unchanged)
 codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500_sampled_200.parquet
-# Table (train)
-hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_2.3k.parquet
-multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_803.parquet
-# Table (test)
+
+# ---------- Table ----------
+# train
+hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
+multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
+# test (unchanged)
 multihier_test_path=${TEST_DATA_DIR}/table__multihier_300_sampled_200.parquet
 hitab_test_path=${TEST_DATA_DIR}/table__hitab_300_sampled_200.parquet
-# Stem (train)
-webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.1k.parquet
-# Stem (test)
+
+# ---------- Stem ----------
+# train
+webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
+# test (unchanged)
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', \
-    '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${ordering_train_path}', '${zebra_train_path}', \
-    '${codeio_train_path}', '${hitab_train_path}', '${multihier_train_path}']"
-test_files="['${math_test_path}', '${aime_test_path}', '${amc_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}', \
-    '${zebralogic_test_path}', '${graph_test_path}', '${ordering_puzzle_test_path}', '${arcagi1_test_path}', '${codeio_test_path}', \
-    '${multihier_test_path}', '${hitab_test_path}']"
+train_files="['${math_train_path}', \
+'${leetcode_train_path}', \
+'${livecodebench_train_path}', \
+'${primeintellect_train_path}', \
+'${taco_train_path}', \
+'${arcagi1_train_path}', \
+'${arcagi2_train_path}', \
+'${barc_train_path}', \
+'${graph_train_path}', \
+'${ordering_train_path}', \
+'${zebra_train_path}', \
+'${codeio_train_path}', \
+'${hitab_train_path}', \
+'${multihier_train_path}', \
+'${webinstruct_train_path}']"
+
+test_files="['${math_test_path}', \
+'${aime_test_path}', \
+'${amc_test_path}', \
+'${humaneval_test_path}', \
+'${mbpp_test_path}', \
+'${livecodebench_test_path}', \
+'${zebralogic_test_path}', \
+'${graph_test_path}', \
+'${ordering_puzzle_test_path}', \
+'${arcagi1_test_path}', \
+'${codeio_test_path}', \
+'${multihier_test_path}', \
+'${hitab_test_path}', \
+'${gpqa_diamond_test_path}', \
+'${supergpqa_test_path}']"
 
 # =================== Model ===================
 BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
@@ -184,9 +220,9 @@ n_resp_per_prompt=4 # Number of prompts to execute during the screening phase
 n_resp_continue=20  # Number of prompts to 
 
 n_resp_per_prompt_val=1
-total_epochs=5
-save_freq=1
-test_freq=5
+total_epochs=10
+save_freq=10
+test_freq=10
 max_ckpt_to_keep=2
 enable_curriculum=True
 val_before_train=True
