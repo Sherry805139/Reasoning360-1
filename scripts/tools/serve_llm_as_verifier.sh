@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=server_llm_as_verifier
+#SBATCH --account=iq
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

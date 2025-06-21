@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=speedrl-cliphigh-test-multinode-rl-qwen32b-base
+#SBATCH --job-name=speedrl-sft-cliphigh-qwen32b-amthink
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
 #SBATCH --nodes=8
@@ -43,6 +43,7 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=/mnt/sharefs/users/zhuojun.cheng
+SHARED_MODEL_PATH=/mnt/sharefs/users/shibo.hao/tz/saves
 TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru92k_release_0603
 TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online 
 
@@ -105,11 +106,12 @@ train_files="['${math_train_path}','${leetcode_train_path}','${livecodebench_tra
 test_files="['${math_test_path}','${aime_test_path}','${amc_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${graph_test_path}','${ordering_puzzle_test_path}','${arcagi1_test_path}','${codeio_test_path}','${multihier_test_path}','${hitab_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}']"
 
 # =================== Model ===================
-BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
+# BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
+BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-1084
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -189,7 +191,7 @@ offload=True
 
 # SpeedRL Config
 n_resp_per_prompt=4 # Number of prompts to execute during the screening phase
-n_resp_continue=12  # Number of prompts to execute during the continuation phase
+n_resp_continue=16  # Number of prompts to execute during the continuation phase
 
 n_resp_per_prompt_val=1
 total_epochs=10
