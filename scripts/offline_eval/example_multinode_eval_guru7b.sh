@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=example-eval-guru-7b
-#SBATCH --nodes=8
-#SBATCH --ntasks=8
+#SBATCH --nodes=4
+#SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -58,6 +58,7 @@ export head_node=${nodes[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 port=6379
 address_head=$head_node_ip:$port
+CONDA_BIN_PATH=/mnt/weka/home/yuqi.wang/miniconda3/envs/Reasoning360/bin
 
 export worker_num=$SLURM_NNODES
 export HYDRA_FULL_ERROR=1
@@ -68,7 +69,7 @@ unset LD_LIBRARY_PATH
 
 # =================== Ray start ===================
 # ray stop at all nodes
-srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 ray stop
+srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 $CONDA_BIN_PATH/ray stop
 
 sleep 10
 # Remove existing Ray cluster
@@ -76,7 +77,7 @@ srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 rm -rf /tmp/ra
 
 # Start Ray head node
 srun --nodes=1 --ntasks=1 -w "$head_node" --export=ALL,VLLM_ATTENTION_BACKEND=XFORMERS \
-    /mnt/weka/home/zhuojun.cheng/miniconda3/envs/Reasoning360/bin/ray start --head --node-ip-address="$head_node_ip" --port=$port \
+    $CONDA_BIN_PATH/ray start --head --node-ip-address="$head_node_ip" --port=$port \
     --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --include-dashboard=True --block &
 
 sleep 10
@@ -86,7 +87,7 @@ for ((i = 1; i < worker_num; i++)); do
     node_i=${nodes[$i]}
     echo "Starting WORKER $i at $node_i"
     srun --nodes=1 --ntasks=1 -w "$node_i" --export=ALL,VLLM_ATTENTION_BACKEND=XFORMERS \
-        /mnt/weka/home/zhuojun.cheng/miniconda3/envs/Reasoning360/bin/ray start --address "$address_head" \
+        $CONDA_BIN_PATH/ray start --address "$address_head" \
         --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --block &    
 done
 sleep 10
@@ -96,36 +97,38 @@ sleep 10
 leaderboard_list=(
     # MATH
     "aime"
-    "math"
+    "aime2025"
+    # "math"
     # CODE GENERATION
-    "mbpp"
-    "humaneval"
-    "livecodebench"
+    # "mbpp"
+    # "humaneval"
+    # "livecodebench"
     # LOGIC
-    "arcagi1"
-    "zebra_puzzle_dataset"
+    # "arcagi1"
+    # "zebra_puzzle_dataset"
     # STEM
-    "gpqa_diamond"
-    "supergpqa"
+    # "gpqa_diamond"
+    # "supergpqa"
     # TABLE
-    "finqa"
-    "hitab"
-    "multihier"
+    # "finqa"
+    # "hitab"
+    # "multihier"
     # SIMULATION
-    "codeio"
-    "cruxeval-i"
-    "cruxeval-o"
+    # "codeio"
+    # "cruxeval-i"
+    # "cruxeval-o"
     # OTHERS
-    "livebench_reasoning"
-    "livebench_language"
-    "livebench_data_analysis"
-    "ifeval"
+#     "livebench_reasoning"
+#     "livebench_language"
+#     "livebench_data_analysis"
+#     "ifeval"
 )
 
 # Define domain mappings for each leaderboard
 declare -A domain_mappings
 
 domain_mappings["aime"]="math"
+domain_mappings["aime2025"]="math"
 domain_mappings["math"]="math"
 domain_mappings["humaneval"]="codegen"
 domain_mappings["livecodebench"]="codegen"
@@ -145,6 +148,16 @@ domain_mappings["livebench_language"]="ood"
 domain_mappings["livebench_data_analysis"]="ood"
 domain_mappings["ifeval"]="ood"
 
+declare -A exp_mappings
+
+exp_mappings["/mnt/sharefs/users/shibo.hao/llama3.1-70B-yz/saves/Llama-3.1-70B-AM-Thinking-v1-old"]="2025-06-10-amthink-sft-llama70b-am-think-v1"
+exp_mappings["/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-old"]="2025-06-10-amthink-sft-qwen32b-am-think-v1"
+exp_mappings["/mnt/sharefs/users/shibo.hao/llama3.1-70B-yz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-old"]="2025-06-10-amthink-sft-qwen32b-am-think-v1-setting2"
+exp_mappings["/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-R1-0528"]="2025-06-10-amthink-sft-qwen32b-r1-0528"
+exp_mappings["/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-OpenThoughts3-1.2M"]="2025-06-18-openthoughts3-sft-qwen32b"
+exp_mappings["/mnt/sharefs/users/shibo.hao/llama3.1-70b-yz/saves/Llama-3.1-70B-OpenThoughts3-1.2M-5epochs-lr5e-5"]="2025-06-18-openthoughts3-sft-llama70b"
+
+
 n_nodes=$SLURM_NNODES
 n_gpus_per_node=8
 gpu_ids=0,1,2,3,4,5,6,7
@@ -152,10 +165,28 @@ gpu_ids=0,1,2,3,4,5,6,7
 SHARED_DATA_PATH=/mnt/sharefs/users/zhuojun.cheng
 data_folder=${SHARED_DATA_PATH}/guru_data/test/offline_leaderboard_release_0603/
 save_folder=./evaluation_results/test_offline_leaderboard_output/
-model_path=LLM360/guru-7b-step320
+# model_path=/mnt/sharefs/users/yuqi.wang/other_ckpts/DeepSeek-R1-Distill-Llama-70B
+# model_path=/mnt/sharefs/users/yuqi.wang/other_ckpts/Qwen3-32B
+# model_path=/mnt/sharefs/users/yuqi.wang/other_ckpts/Qwen2.5-32B-Instruct
+# model_path=/mnt/sharefs/users/haonan.li/Qwen2.5-32B-instruct-think_pattern_base/checkpoint-222
+# model_path=/mnt/sharefs/users/haonan.li/Qwen2.5-32B-instruct-think_pattern_simple
+# model_path=/mnt/sharefs/users/haonan.li/Qwen2.5-32B-instruct-think_pattern_complex
+# model_path=/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-OpenThoughts3-1.2M/checkpoint-2900
+# model_path=/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-550
+# model_path=/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-1084
+# model_path=/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-R1-0528/checkpoint-700
+model_path=/mnt/sharefs/users/shibo.hao/tz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-R1-0528/checkpoint-1422
+# model_path=/mnt/sharefs/users/shibo.hao/llama3.1-70B-yz/saves/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-2168
 
 # Extract model name from the path
-model_name=$(basename "$model_path")
+model_path_basename=$(basename "$model_path")
+if [[ $model_path_basename == "checkpoint-"* ]]; then
+  model_path_dirname=$(dirname "$model_path")
+  model_name=${exp_mappings[$model_path_dirname]}-$model_path_basename
+else
+  model_name=$model_path_basename
+fi
+echo $model_name
 
 # Check if leaderboard generation folder exists, create if it doesn't
 if [ ! -d "$save_folder" ]; then
@@ -202,8 +233,8 @@ for leaderboard in "${leaderboard_list[@]}"; do
     fi
 
     batch_size=1024
-    temperature=1.0
-    top_p=0.7
+    temperature=0.6
+    top_p=0.95
     top_k=-1 # 0 for hf rollout, -1 for vllm rollout
 
     if [ "$leaderboard" == "arcagi1" ]; then
@@ -213,7 +244,7 @@ for leaderboard in "${leaderboard_list[@]}"; do
         prompt_length=4096
         response_length=28672
     fi
-    tensor_model_parallel_size=4
+    tensor_model_parallel_size=8
     gpu_memory_utilization=0.7
     
     # Create log files - one for generation and one for evaluation
@@ -247,7 +278,7 @@ for leaderboard in "${leaderboard_list[@]}"; do
     # Generation step with tee to generation log file
     echo "Starting generation for $leaderboard at $(date)" | tee -a "$gen_log_file"
     {
-        ${CONDA_BIN_PATH}python -m verl.trainer.main_generation \
+        ${CONDA_BIN_PATH}/python -m verl.trainer.main_generation \
             trainer.nnodes=$n_nodes \
             trainer.n_gpus_per_node=$n_gpus_per_node \
             data.path="$data_file" \
@@ -272,7 +303,7 @@ for leaderboard in "${leaderboard_list[@]}"; do
     echo "Starting evaluation for $leaderboard at $(date)" | tee -a "$eval_log_file"
     unset LD_LIBRARY_PATH
     {
-        ${CONDA_BIN_PATH}python -m verl.trainer.main_eval \
+        ${CONDA_BIN_PATH}/python -m verl.trainer.main_eval \
             data.path="$save_path" \
             data.prompt_key=prompt \
             data.response_key=responses \
