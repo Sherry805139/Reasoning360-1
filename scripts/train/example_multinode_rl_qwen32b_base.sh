@@ -2,8 +2,8 @@
 #SBATCH --job-name=rl-cliphigh-qwen32b-amthink-sft
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
-#SBATCH --nodes=8
-#SBATCH --ntasks=8
+#SBATCH --nodes=16
+#SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -55,14 +55,15 @@ math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
 amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
 
-# Code (train)
-leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
-livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__livecodebench_440.parquet
-primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__primeintellect_7.5k.parquet
-taco_train_path=${TRAIN_DATA_DIR}/codegen__taco_8.8k.parquet
-# Code (test)
+# ---------- Code ----------
+# train
+leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_1.3k.parquet
+livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_440.parquet
+primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_7.5k.parquet
+taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_8.8k.parquet
+# test (unchanged)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
+mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500_sampled_200.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
 
 # ---------- Logic ----------
@@ -158,7 +159,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 8))
+max_response_length=$((1024 * 8))  # 16k response length... We need to start higher to support SFT model
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -193,7 +194,7 @@ total_epochs=10
 save_freq=10
 test_freq=10
 max_ckpt_to_keep=2
-enable_curriculum=True
+enable_curriculum=False
 val_before_train=True
 
 # =================== Start RL training ===================
@@ -273,6 +274,7 @@ val_before_train=True
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
+    trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
     trainer.save_freq=${save_freq} \
     trainer.test_freq=${test_freq} \
