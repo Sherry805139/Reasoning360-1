@@ -55,15 +55,14 @@ math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
 amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
 
-# ---------- Code ----------
-# train
-leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_1.3k.parquet
-livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_440.parquet
-primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_7.5k.parquet
-taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_8.8k.parquet
-# test (unchanged)
+# Code (train)
+leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
+livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__livecodebench_440.parquet
+primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__primeintellect_7.5k.parquet
+taco_train_path=${TRAIN_DATA_DIR}/codegen__taco_8.8k.parquet
+# Code (test)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500_sampled_200.parquet
+mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
 
 # ---------- Logic ----------
@@ -185,8 +184,8 @@ gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up modelforward, but note memory overflow
 offload=True
 
 n_resp_per_prompt_val=1

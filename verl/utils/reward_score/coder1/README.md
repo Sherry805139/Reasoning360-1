@@ -8,7 +8,7 @@ SandboxFusion is a secure code execution service that provides isolated environm
 ### Prerequisites
 - Docker Hub access to pull the container image:
   ```bash
-  enroot import http://varad0309/code_sandbox:server
+  enroot import docker://varad0309/code_sandbox:server
   # This creates: varad0309+code_sandbox+server.sqsh
   ```
 
@@ -19,16 +19,14 @@ SandboxFusion is a secure code execution service that provides isolated environm
 #!/bin/bash
 #SBATCH --job-name=sandbox_server
 #SBATCH --output=logs/sandbox-%j.log
-#SBATCH --ntasks=1
-#SBATCH --time=10:00:00
-#SBATCH --partition=main
-#SBATCH --gres=gpu:8
-#SBATCH --nodelist=fs-mbz-gpu-XXX    # Replace XXX with your node
-#SBATCH --cpus-per-task=128
-#SBATCH --mem=140G
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=96
+#SBATCH --partition=cpuonly
+#SBATCH --nodelist=fs-mbz-cpu-XXX    # Replace XXX with your node
+#SBATCH --time=4-00:00:00
 #SBATCH --exclusive
 
-srun --container-image=/path/to/varad0309+code_sandbox+server.sqsh \
+srun --container-image=/path/to/varad0309+code_sandbox+server.sqsh  \
     --container-name=sandbox-server \
     --export=ALL,HOST=0.0.0.0,PORT=8080 \
     bash -c "make run-online"

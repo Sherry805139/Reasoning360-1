@@ -1,33 +1,51 @@
 # Reasoning360
 
-This is the official repository of **Reasoning360** aiming to produce strong and provide fully-open researhc on large reasoning models, currently containing data processing and filtering, RL training, and evaluation suite. It's initialized from [verl](https://github.com/volcengine/verl).
+<p align="center">
+  <a href="https://arxiv.org/abs/2506.14965">
+    <img alt="Paper" src="https://img.shields.io/badge/Paper-arXiv%3A2506.14965-b31b1b?style=flat&logo=arxiv">
+  </a>
+  <a href="https://huggingface.co/datasets/LLM360/guru-RL-92k">
+    <img alt="Dataset" src="https://img.shields.io/badge/Data-guru--92k-blue?logo=huggingface&logoColor=yellow">
+  </a>
+  <a href="https://huggingface.co/LLM360/guru-7B">
+    <img alt="Model" src="https://img.shields.io/badge/Model-guru--model-ffcc00?logo=huggingface&logoColor=yellow">
+  </a>
+</p>
 
-## News
-+ The ready-to-train 92K Guru RL data across six domains is released under [LLM360 huggingface](https://huggingface.co/datasets/LLM360/guru_RL)!
+
+This is the official repository of Reasoning360, a project dedicated to *open research on large-scale reasoning models*. The repository currently includes data processing and filtering tools, reinforcement learning (RL) training pipelines, and an evaluation suite. It's initialized from [verl](https://github.com/volcengine/verl).
+
+## 🔥News
++ Our paper to analyze and improve multi-domain RL for LLM reasoning with Guru data "[Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective](https://arxiv.org/abs/2506.14965)" is out on arxiv.
+
++ The ready-to-train 92K Guru RL data across six domains is released under [LLM360 huggingface](https://huggingface.co/datasets/LLM360/guru_RL).
 
 
 ---
 ## Table of Contents
-- [Reasoning360](#reasoning360)
-  - [News](#news)
-  - [Table of Contents](#table-of-contents)
-  - [Installation](#installation)
-  - [Data preparation](#data-preparation)
-  - [RL Training](#rl-training)
-    - [(1) Download data](#1-download-data)
-    - [(2) \[Optional\] Customize chat template](#2-optional-customize-chat-template)
-    - [(3) \[Optional\] SandboxFusion Code Execution](#3-optional-sandboxfusion-code-execution)
-    - [(4) Train](#4-train)
-  - [Evaluation](#evaluation)
-  - [Contributing](#contributing)
-    - [Add a new dataset for training (or evaluation)](#add-a-new-dataset-for-training-or-evaluation)
-    - [Pre-commit](#pre-commit)
-    - [Pull Request](#pull-request)
+- [Installation](#installation)
+- [Data preparation](#data-preparation)
+- [RL Training](#rl-training)
+  - [(1) Download data](#1-download-data)
+  - [(2) \[Optional\] Customize chat template](#2-optional-customize-chat-template)
+  - [(3) \[Optional\] SandboxFusion Code Execution](#3-optional-sandboxfusion-code-execution)
+  - [(4) Train](#4-train)
+- [Evaluation](#evaluation)
+- [Contributing](#contributing)
+  - [Add a new dataset for training (or evaluation)](#add-a-new-dataset-for-training-or-evaluation)
+  - [Pre-commit](#pre-commit)
+  - [Pull Request](#pull-request)
 
 
 ---
 
 ## Installation
+
+```bash
+git clone git@github.com:LLM360/Reasoning360.git
+cd Reasoning360
+```
+
 
 ```bash
 conda create -n Reasoning360 python=3.12
@@ -36,7 +54,7 @@ conda install -c nvidia/label/cuda-12.4.0 cuda-toolkit cuda-nvcc
 pip install uv # using uv to install packages is faster than pip
 uv pip install torch==2.6.0
 uv pip install flash-attn==2.7.3 --no-build-isolation
-uv pip install -e .[gpu,math]
+uv pip install -e .[gpu,math,vllm,test]
 ```
 
 Alternatively, you can refer to verl [installment guidance](https://verl.readthedocs.io/en/latest/index.html) for setup.
@@ -52,7 +70,7 @@ import json
 from datasets import load_dataset
 
 # Load dataset
-dataset = load_dataset("LLM360/guru_RL")
+dataset = load_dataset("LLM360/guru-RL-92k")
 train_data = dataset["train"]
 
 print(f"Columns: {train_data.column_names}")
@@ -62,9 +80,8 @@ print(json.dumps(train_data[0], indent=2))
 ---
 ## RL Training
 ### (1) Download data
-Download the data and prepare them into `.parquet`, the expected default format in training script. 
-Run `scripts/train/download_hf.py` to download all dataset files for training, online/offline evaluation to local directories.
-Training files will be put in `/dataset/train`. Online evaluation files will be put in `/dataset/online_eval`. Offline evaluation files will be put in `/dataset/offline_eval`.
+Download the data and prepare them into `.parquet`, the expected default format in training script. We provide a simple script to download and organize Guru data `scripts/tools/download_guru.py`, with all dataset files for training, online & offline evaluation to local directories.
+By defauly, training files will be put in `./data/train`. Online evaluation files will be put in `./data/online_eval`. Offline evaluation files will be put in `./data/offline_eval`.
 
 ### (2) [Optional] Customize chat template
 Run `tools/change_tokenizer_config.py` if you want to apply 'think'-aware chat template. Now only the 'Qwen' families are supported.
@@ -72,26 +89,11 @@ Run `tools/change_tokenizer_config.py` if you want to apply 'think'-aware chat t
 python tools/change_tokenizer_config.py -i <input_model_directory> -o <output_model_directory>
 ```
 
-### (3) Train
-We provide the multi-node training slurm script using a `math3k` subset data for ablation, not the full data. Change the `SHARED_DATA_PATH` upon your data path.
-```bash
-sbatch scripts/train/example_multinode_rl_qwen32b_base.sh
-```
-
-If you need to train on the full data or include STEM data in Guru, host the llm-as-verifier model first before launching the training.
-```bash
-sbatch scripts/tools/serve_llm_as_verifier.sh
-```
-Then fill in the `export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"` by the llm-as-verifier server IP. It uses one GPU node to serve a 1.5B [general-verifier](https://huggingface.co/TIGER-Lab/general-verifier) now.
-
-(TODO: build a single-node script not using slurm)
-
----
-## SandboxFusion Code Execution
+### (3) [Optional] SandboxFusion Code Execution
 
 SandboxFusion provides secure code execution for training and evaluation. It supports both containerized SLURM deployment and local installation.
 
-### Quick Setup
+#### Quick Setup
 
 **Option 1: SLURM Container (Recommended for production)**
 ```bash
@@ -110,7 +112,7 @@ poetry install
 make run-online
 ```
 
-### Configuration
+#### Configuration
 
 Configure sandbox servers in your training script:
 
@@ -140,6 +142,22 @@ success, output = code_exec_sandboxfusion(
 ```
 
 For detailed setup instructions, see [`verl/utils/reward_score/coder1/README.md`](verl/utils/reward_score/coder1/README.md).
+
+
+### (4) Train
+We provide the multi-node training slurm script using a `math3k` subset data for ablation, not the full data. Change the `SHARED_DATA_PATH` upon your data path.
+```bash
+sbatch scripts/train/example_multinode_rl_qwen32b_base.sh
+```
+
+If you need to train on the full data or include STEM data in Guru, host the llm-as-verifier model first before launching the training.
+```bash
+sbatch scripts/tools/serve_llm_as_verifier.sh
+```
+Then fill in the `export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"` by the llm-as-verifier server IP. It uses one GPU node to serve a 1.5B [general-verifier](https://huggingface.co/TIGER-Lab/general-verifier) now.
+
+(TODO: build a single-node script not using slurm)
+
 
 ---
 ## Evaluation
