@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=taylor-test-multinode-rl-qwen32b-base
+#SBATCH --job-name=rl-cliphigh-qwen32b-amthink-sft
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
 #SBATCH --nodes=8
@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
-#SBATCH --mem=512G
+#SBATCH --mem=0
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
@@ -16,7 +16,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="http://10.24.1.180:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -43,61 +43,75 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=/mnt/sharefs/users/zhuojun.cheng
-TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru18k
-TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online
+SHARED_MODEL_PATH=/mnt/sharefs/users/shibo.hao/tz/saves
+TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru92k_release_0603
+TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online 
 
-# Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_3.1k.parquet
-# Math (test)
+# ---------- Math ----------
+# train
+math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet
+# test
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
 amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
-# Code (train)
-leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_216.parquet
-livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_75.parquet
-primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_1.3k.parquet
-taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_1.5k.parquet
-# Code (test)
+
+# ---------- Code ----------
+# train
+leetcode_train_path=${TRAIN_DATA_DIR}/codegen__deduped_leetcode2k_1.3k.parquet
+livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__deduped_livecodebench_440.parquet
+primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_7.5k.parquet
+taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_8.8k.parquet
+# test (unchanged)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
 mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500_sampled_200.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
-# Logic (train)
-arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_54.parquet
-arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_93.parquet
-barc_train_path=${TRAIN_DATA_DIR}/logic__barc_765.parquet
-graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_605.parquet
-ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_918.parquet
-zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_637.parquet
-# Logic (test)
+
+# ---------- Logic ----------
+# train
+arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_111.parquet
+arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_190.parquet
+barc_train_path=${TRAIN_DATA_DIR}/logic__barc_1.6k.parquet
+graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_1.2k.parquet
+ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_1.9k.parquet
+zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_1.3k.parquet
+# test (unchanged)
 zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300_sampled_200.parquet
 graph_test_path=${TEST_DATA_DIR}/logic__graph_logical_dataset_150_sampled_77.parquet
 ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150_sampled_100.parquet
 arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
-# Simulation (train)
-codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k_3.1k.parquet
-# Simulation (test)
+
+# ---------- Simulation ----------
+# train
+codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k_3.7k.parquet
+# test (unchanged)
 codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500_sampled_200.parquet
-# Table (train)
-hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_2.3k.parquet
-multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_803.parquet
-# Table (test)
+
+# ---------- Table ----------
+# train
+hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
+multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
+# test (unchanged)
 multihier_test_path=${TEST_DATA_DIR}/table__multihier_300_sampled_200.parquet
 hitab_test_path=${TEST_DATA_DIR}/table__hitab_300_sampled_200.parquet
-# Stem (train)
-webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.1k.parquet
-# Stem (test)
+
+# ---------- Stem ----------
+# train
+webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
+# test (unchanged)
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}']"
-test_files="['${math_test_path}']"
+train_files="['${math_train_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${codeio_train_path}','${hitab_train_path}','${multihier_train_path}','${webinstruct_train_path}']"
+
+test_files="['${math_test_path}','${aime_test_path}','${amc_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${graph_test_path}','${ordering_puzzle_test_path}','${arcagi1_test_path}','${codeio_test_path}','${multihier_test_path}','${hitab_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}']"
 
 # =================== Model ===================
-BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
+# BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
+BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-1084
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -142,7 +156,7 @@ use_kl_loss=False
 kl_loss_coef=0.0
 
 clip_ratio_low=0.2
-clip_ratio_high=0.2
+clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
 max_response_length=$((1024 * 8))
@@ -174,6 +188,14 @@ use_dynamic_bsz=True
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
 offload=True
+
+n_resp_per_prompt_val=1
+total_epochs=10
+save_freq=10
+test_freq=10
+max_ckpt_to_keep=2
+enable_curriculum=True
+val_before_train=True
 
 # =================== Start RL training ===================
 "${CONDA_BIN_PATH}python" -m verl.recipe.dapo.src.main_dapo \
@@ -252,10 +274,11 @@ offload=True
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
-    trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=1 \
-    trainer.test_freq=5 \
-    trainer.total_epochs=5 \
+    trainer.save_freq=${save_freq} \
+    trainer.test_freq=${test_freq} \
+    trainer.total_epochs=${total_epochs} \
+    trainer.max_actor_ckpt_to_keep=${max_ckpt_to_keep} \
+    trainer.max_critic_ckpt_to_keep=${max_ckpt_to_keep} \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto
