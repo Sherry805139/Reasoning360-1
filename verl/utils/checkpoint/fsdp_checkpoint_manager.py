@@ -156,8 +156,10 @@ class FSDPCheckpointManager(BaseCheckpointManager):
             self.remove_previous_save_local_path(self.previous_saved_paths[:keep_start])
             self.previous_saved_paths = self.previous_saved_paths[keep_start:]
 
-        local_path = self.local_mkdir(local_path)
+        if self.rank == 0:  # added by Reasoning360: file system got problem on rank0 when co-current making dirs, so we make dirs on rank0 only
+            local_path = self.local_mkdir(local_path)
         torch.distributed.barrier()
+        local_path = self.local_mkdir(local_path)  # hack fix: to get the local path for non-rank0
 
         # every rank will save its own model and optim shard
         state_dict_cfg = ShardedStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
@@ -207,7 +209,9 @@ class FSDPCheckpointManager(BaseCheckpointManager):
 
         if "hf_model" in self.checkpoint_contents:
             hf_local_path = os.path.join(local_path, "huggingface")
-            os.makedirs(hf_local_path, exist_ok=True)
+            if self.rank == 0:
+                os.makedirs(hf_local_path, exist_ok=True)
+            torch.distributed.barrier()
 
             # Only rank 0 will save hf model and,
             # offload to cpu to save LLMs which may be too large to fit in one GPU
