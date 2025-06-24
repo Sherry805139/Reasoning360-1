@@ -323,7 +323,6 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
         raise NotImplementedError
     return data
 
-
 @contextmanager
 def _timer(name: str, timing_raw: Dict[str, float]):
     """Context manager for timing code execution.
@@ -1017,6 +1016,8 @@ class RayPPOTrainer:
         last_val_metrics = None
 
         for epoch in range(self.config.trainer.total_epochs):
+            # save the train_dataset for checking 
+            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, f"train_dataset_epoch_{epoch}.csv"), index=False)
             for batch_dict in self.train_dataloader:
                 metrics = {}
                 timing_raw = {}

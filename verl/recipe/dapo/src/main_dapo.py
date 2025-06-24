@@ -160,7 +160,6 @@ class TaskRunner:
             from verl.workers.reward_manager import AsyncDAPORewardManager
             reward_manager_cls = AsyncDAPORewardManager
         else:
-
             raise NotImplementedError
 
         compute_score = get_custom_reward_fn(config)
