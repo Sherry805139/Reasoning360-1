@@ -1016,8 +1016,6 @@ class RayPPOTrainer:
         last_val_metrics = None
 
         for epoch in range(self.config.trainer.total_epochs):
-            # save the train_dataset for checking 
-            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, f"train_dataset_epoch_{epoch}.csv"), index=False)
             for batch_dict in self.train_dataloader:
                 metrics = {}
                 timing_raw = {}

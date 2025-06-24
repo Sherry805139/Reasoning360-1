@@ -16,6 +16,7 @@ FSDP PPO Trainer with Ray-based single controller.
 This trainer supports model-agonistic model initialization with huggingface
 """
 
+import os
 import uuid
 from pprint import pprint
 from copy import deepcopy
@@ -132,6 +133,7 @@ class RayDAPOTrainer(RayPPOTrainer):
         num_prompt_in_batch = 0
         num_gen_batches = 0
         for epoch in range(self.config.trainer.total_epochs):
+            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, f"train_dataset_epoch_{epoch}.csv"), index=False)
             for batch_dict in self.train_dataloader:
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
