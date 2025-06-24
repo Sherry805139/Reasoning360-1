@@ -6,6 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
+#SBATCH --account=iq
 #SBATCH --mem=512G
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
@@ -49,7 +50,7 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_10k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -108,7 +109,8 @@ train_files="['${math_train_path}']"
 test_files="['${math_test_path}', '${aime_test_path}']"
 
 # =================== Model ===================
-BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
+# BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
+BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
@@ -159,8 +161,8 @@ kl_loss_coef=0.0
 clip_ratio_low=0.2
 clip_ratio_high=0.2
 
-max_prompt_length=$((1024 * 8))
-max_response_length=$((1024 * 24))
+max_prompt_length=$((1024 * 4))
+max_response_length=$((1024 * 8))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -170,7 +172,7 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=16
 train_prompt_mini_bsz=32  # model grad update batchsize
@@ -269,8 +271,8 @@ offload=True
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=5 \
-    trainer.test_freq=5 \
+    trainer.save_freq=50 \
+    trainer.test_freq=50 \
     trainer.total_epochs=5 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto
