@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=speedrl-sft-cliphigh-qwen32b-amthink
+#SBATCH --job-name=speedrl-16kgen-sft-cliphigh-qwen32b-amthink
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
-#SBATCH --nodes=8
-#SBATCH --ntasks=8
+#SBATCH --nodes=16
+#SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -159,7 +159,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 8))
+max_response_length=$((1024 * 16))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -185,13 +185,13 @@ gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up modelforward, but note memory overflow
 offload=True
 
 # SpeedRL Config
 n_resp_per_prompt=4 # Number of prompts to execute during the screening phase
-n_resp_continue=16  # Number of prompts to execute during the continuation phase
+n_resp_continue=12  # Number of prompts to execute during the continuation phase
 
 n_resp_per_prompt_val=1
 total_epochs=10
