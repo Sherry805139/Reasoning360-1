@@ -1,6 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=sft-16kgen-rl-cliphigher-qwen32b-amthink
+#SBATCH --job-name=sft-32kgen-rl-cliphigher-qwen32b-amthink
 #SBATCH --partition=main
+#SBATCH --account=iq
 #SBATCH --nodes=16
 #SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=1
@@ -41,9 +42,10 @@ export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
-SHARED_DATA_PATH=./data
-TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train/
-TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval/
+SHARED_DATA_PATH=/mnt/sharefs/users/zhuojun.cheng
+SHARED_MODEL_PATH=/mnt/sharefs/users/shibo.hao/tz/saves
+TRAIN_DATA_DIR=${SHARED_DATA_PATH}/guru_data/train/guru92k_release_0603
+TEST_DATA_DIR=${SHARED_DATA_PATH}/guru_data/test/online      # ← unchanged
 
 # ---------- Math ----------
 # train
@@ -185,7 +187,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -211,8 +213,8 @@ gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up modelforward, but note memory overflow
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up model forward & backward but note memory overflow
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up modelforward, but note memory overflow
 offload=True
 
 n_resp_per_prompt_val=1
