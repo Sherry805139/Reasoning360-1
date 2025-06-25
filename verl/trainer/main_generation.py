@@ -262,6 +262,24 @@ def main_task(config):
             merged_dataset.to_parquet(config.data.output_path)
 
         print(f"Saved merged AIME responses to {config.data.output_path}")
+        
+        # Also save the merged results as JSON
+        # merged_results = []
+        # df_to_iterate = merged_dataset if hasattr(merged_dataset, 'iterrows') else merged_dataset.to_pandas()
+        # for _, row in df_to_iterate.iterrows():
+        #     merged_results.append({
+        #         "prompt": row[config.data.prompt_key],
+        #         "prompt_content": row["prompt_content"],
+        #         "responses": row["responses"],
+        #         "ground_truth": str(row.get("reward_model", "")),
+        #     })
+        
+        # model_name = config.model.path.split('/')[-1]
+        # json_output_path = config.data.output_path.replace('.parquet', f'_merged_{model_name}.json')
+        # with open(json_output_path, 'w', encoding='utf-8') as f:
+        #     json.dump(merged_results, f, indent=2, ensure_ascii=False)
+        # print(f"Saved merged AIME results as JSON to {json_output_path}")
+        
     else:
         # Original logic for non-AIME datasets
         # add to the data frame

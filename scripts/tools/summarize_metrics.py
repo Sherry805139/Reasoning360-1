@@ -25,14 +25,15 @@ def main():
                 all_metrics[model_result_dir][result_file.split('.')[0]] = data
                 
     # Print the summary
+    print(all_metrics)
     rows = []
     for model_result_dir in sorted(all_metrics):
         row = []
-        if not model_result_dir.startswith("[wrong]"):
+        if model_result_dir.startswith("[new]"):
             row.append(model_result_dir)
             for result_file in sorted(all_metrics[model_result_dir], reverse=True):
                 # row.append(result_file)
-                row.append(all_metrics[model_result_dir][result_file]["pass@1_(avg4)"])
+                row.append(all_metrics[model_result_dir][result_file]["pass@1_(avg32)"])
             rows.append(row)
     print(tabulate(rows, headers=["model", "aime24", "aime25"], tablefmt="tsv", numalign="right", floatfmt=".2f"))
         
