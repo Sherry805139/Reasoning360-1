@@ -201,8 +201,7 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor):
     dataset.dataframe["prompt_id"] = dataset.dataframe["extra_info"].map(
         lambda x: generate_prompt_id(x["original_question"])
         )
-    dataset.dataframe['on_policy_pass_rate'] = 0.0
-    
+    dataset.dataframe["on_policy_pass_rate"] = 0.0
     return dataset
 
 

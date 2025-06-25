@@ -42,55 +42,60 @@ class RayDAPOTrainer(RayPPOTrainer):
     Note that this trainer runs on the driver process on a single CPU/GPU node.
     """
 
-    def _create_priority_dataloader(self, epoch_idx, train_dataset, val_dataset, collate_fn, train_sampler):
+    def _create_priority_dataloader(self, epoch_idx):
         """
         Create the dataloader every time before the epoch starts.
-        For every 5 epoch, we call super()._create_dataloader to create the dataloader with RandomSampler.
-        For other epochs, we create the dataloader focusing on the priority samples: 0 < pass_rate < 1.
         """
-        # identify and sort the priority samples: 
-        priority_samples = self.train_dataset
+        from torch.utils.data import SequentialSampler
+        from verl.trainer.main_ppo import create_rl_sampler
+        from verl.utils.dataset.rl_dataset import collate_fn
+        from torchdata.stateful_dataloader import StatefulDataLoader
+        if epoch_idx % 4 == 0: 
+            # epoch_idx == 0: re-create the dataloader for the whole dataset, with RandomSampler if data_config.shuffle else SequentialSampler;
+            # epoch_idx % 4 == 0: create a dataloader for the whole dataset, with RandomSampler if data_config.shuffle else SequentialSampler;
+            # might be wordy but is more clear. 
+            train_sampler = create_rl_sampler(self.config.data, self.train_dataset)
+            self.train_dataloader = StatefulDataLoader(
+                dataset=self.train_dataset,
+                batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
+                num_workers=self.config.data.get("dataloader_num_workers", 8),
+                drop_last=True,
+                collate_fn=collate_fn,
+                sampler=train_sampler,
+            )
+        else:
+            # first copy the self.train_dataset, make sure the original dataset is not modified
+            # then select and sort the subsamples from the whole self.train_dataset.dataframe
+            # finally create the dataloader based on the selected dataframe (with a new SequentialSampler)
+            train_dataset_copy = deepcopy(self.train_dataset)
+            train_dataset_copy.dataframe = (
+                self.train_dataset.dataframe
+                .loc[self.train_dataset.dataframe["on_policy_pass_rate"] < self.config.trainer.pass_rate_threshold]
+                .sort_values(by="on_policy_pass_rate", ascending=False)
+                .reset_index(drop=True)
+            )
+            # re-create the self.train_dataset from the selected dataframe
+            sequential_sampler = SequentialSampler(data_source=train_dataset_copy.dataframe)
+            self.train_dataloader = StatefulDataLoader(
+                dataset=train_dataset_copy,
+                batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
+                num_workers=self.config.data.get("dataloader_num_workers", 8),
+                drop_last=True,
+                collate_fn=collate_fn,
+                sampler=sequential_sampler,
+            )
+            print(f"Dataset filtering statistics for epoch {epoch_idx}:")
+            print(f"Original dataset size: {len(self.train_dataset.dataframe)}")
+            print(f"Filtered dataset size: {len(train_dataset_copy.dataframe)}")
+            print(f"Discarded data points: {len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)}")
+            print(f"Percentage discarded: {(len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)) / len(self.train_dataset.dataframe):.2f}%")
 
-        self.train_dataloader = StatefulDataLoader(
-            dataset=self.train_dataset,
-            batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
-            num_workers=self.config.data.get("dataloader_num_workers", 8),
-            drop_last=True,
-            collate_fn=collate_fn,
-            sampler=train_sampler,
-        )
-
-        self.val_dataloader = StatefulDataLoader(
-            dataset=self.val_dataset,
-            batch_size=val_batch_size,
-            num_workers=self.config.data.get("dataloader_num_workers", 8),
-            shuffle=False,
-            drop_last=False,
-            collate_fn=collate_fn,
-        )
+            print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
+            # we untouch the setup of actor_rollout_ref.actor.optim. etc.
+            # reference: verl/trainer/ppo/ray_trainer.py -> _create_dataloader()
 
         assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
         assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
-
-        print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
-
-        total_training_steps = len(self.train_dataloader) * self.config.trainer.total_epochs
-
-        if self.config.trainer.total_training_steps is not None:
-            total_training_steps = self.config.trainer.total_training_steps
-
-        self.total_training_steps = total_training_steps
-        print(f"Total training steps: {self.total_training_steps}")
-
-        try:
-            OmegaConf.set_struct(self.config, True)
-            with open_dict(self.config):
-                if OmegaConf.select(self.config, "actor_rollout_ref.actor.optim"):
-                    self.config.actor_rollout_ref.actor.optim.total_training_steps = total_training_steps
-                if OmegaConf.select(self.config, "critic.optim"):
-                    self.config.critic.optim.total_training_steps = total_training_steps
-        except Exception as e:
-            print(f"Warning: Could not set total_training_steps in config. Structure missing? Error: {e}")
 
 
     def fit(self):
@@ -133,7 +138,13 @@ class RayDAPOTrainer(RayPPOTrainer):
         num_prompt_in_batch = 0
         num_gen_batches = 0
         for epoch in range(self.config.trainer.total_epochs):
-            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, f"train_dataset_epoch_{epoch}.csv"), index=False)
+            self._create_priority_dataloader(epoch_idx=epoch)
+            # create create the default_local_dir if not exists
+            if not os.path.exists(self.config.trainer.default_local_dir):
+                os.makedirs(self.config.trainer.default_local_dir)
+            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, 
+                f"train_dataset_epoch_{epoch}.csv"), index=False)
+
             for batch_dict in self.train_dataloader:
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
