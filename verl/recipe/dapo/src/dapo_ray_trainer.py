@@ -50,10 +50,8 @@ class RayDAPOTrainer(RayPPOTrainer):
         from verl.trainer.main_ppo import create_rl_sampler
         from verl.utils.dataset.rl_dataset import collate_fn
         from torchdata.stateful_dataloader import StatefulDataLoader
-        if epoch_idx % 4 == 0: 
+        if epoch_idx == 0 or self.config.trainer.pass_rate_threshold == 1.0: 
             # epoch_idx == 0: re-create the dataloader for the whole dataset, with RandomSampler if data_config.shuffle else SequentialSampler;
-            # epoch_idx % 4 == 0: create a dataloader for the whole dataset, with RandomSampler if data_config.shuffle else SequentialSampler;
-            # might be wordy but is more clear. 
             train_sampler = create_rl_sampler(self.config.data, self.train_dataset)
             self.train_dataloader = StatefulDataLoader(
                 dataset=self.train_dataset,
@@ -74,7 +72,10 @@ class RayDAPOTrainer(RayPPOTrainer):
             train_dataset_copy = deepcopy(self.train_dataset)
             train_dataset_copy.dataframe = (
                 self.train_dataset.dataframe
-                .loc[self.train_dataset.dataframe["on_policy_pass_rate"] < self.config.trainer.pass_rate_threshold]
+                .loc[
+                    (self.train_dataset.dataframe["on_policy_pass_rate"] > 0.1) &
+                    (self.train_dataset.dataframe["on_policy_pass_rate"] < self.config.trainer.pass_rate_threshold)
+                ]
                 .sort_values(by="on_policy_pass_rate", ascending=False)
                 .reset_index(drop=True)
             )

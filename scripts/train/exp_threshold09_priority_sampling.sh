@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=PrioritySamplingThreshold09
+#SBATCH --job-name=PrioritySamplingThreshold09-Qwen2.5-7B-Dsitialled
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -11,6 +11,7 @@
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
+#SBATCH --account=iq
 
 
 # =================== Frequently Used Variables ===================
@@ -46,7 +47,7 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_10k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -97,7 +98,7 @@ test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_te
 
 
 # =================== Model ===================
-BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
+BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 CONDA_BIN_PATH=/mnt/weka/home/chengqian.gao/.envs/reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=PrioritySampling
@@ -149,7 +150,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 12))
+max_response_length=$((1024 * 16))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -258,10 +259,10 @@ offload=True
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=5 \
-    trainer.test_freq=5 \
+    trainer.save_freq=50 \
+    trainer.test_freq=2 \
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
     +trainer.pass_rate_threshold=0.9 \
-    trainer.default_local_dir='/mnt/sharefs/users/chengqian.gao/priority_sampling_threshold_09' $@
+    trainer.default_local_dir='/mnt/sharefs/users/chengqian.gao/priority_sampling_qwen25_7b_dist_threshold_09' $@

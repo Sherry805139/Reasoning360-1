@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=PrioritySamplingThreshold07-Qwen2.5-7B-Dsitialled
+#SBATCH --job-name=PrioritySamplingThreshold05-Qwen2.5-7B-Dsitialled
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -12,7 +12,6 @@
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
 #SBATCH --account=iq
-
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
@@ -264,5 +263,5 @@ offload=True
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
-    +trainer.pass_rate_threshold=0.7 \
-    trainer.default_local_dir='/mnt/sharefs/users/chengqian.gao/priority_sampling_qwen25_7b_dist_threshold_07' $@
+    +trainer.pass_rate_threshold=0.5 \
+    trainer.default_local_dir='/mnt/sharefs/users/chengqian.gao/priority_sampling_qwen25_7b_dist_threshold_05_qwen25_7b_dist' $@
