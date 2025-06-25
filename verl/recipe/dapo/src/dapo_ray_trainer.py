@@ -63,6 +63,10 @@ class RayDAPOTrainer(RayPPOTrainer):
                 collate_fn=collate_fn,
                 sampler=train_sampler,
             )
+            assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
+            assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
+
+            return self.train_dataset
         else:
             # first copy the self.train_dataset, make sure the original dataset is not modified
             # then select and sort the subsamples from the whole self.train_dataset.dataframe
@@ -84,19 +88,23 @@ class RayDAPOTrainer(RayPPOTrainer):
                 collate_fn=collate_fn,
                 sampler=sequential_sampler,
             )
+            discarded = len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)
+            pct = 100 * discarded / len(self.train_dataset.dataframe)
+
             print(f"Dataset filtering statistics for epoch {epoch_idx}:")
             print(f"Original dataset size: {len(self.train_dataset.dataframe)}")
             print(f"Filtered dataset size: {len(train_dataset_copy.dataframe)}")
-            print(f"Discarded data points: {len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)}")
-            print(f"Percentage discarded: {(len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)) / len(self.train_dataset.dataframe):.2f}%")
+            print(f"Discarded data points: {discarded}")
+            print(f"Percentage discarded: {pct:.2f}%")
 
             print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
             # we untouch the setup of actor_rollout_ref.actor.optim. etc.
             # reference: verl/trainer/ppo/ray_trainer.py -> _create_dataloader()
 
-        assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
-        assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
+            assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
+            assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
 
+            return train_dataset_copy
 
     def fit(self):
         """
@@ -138,11 +146,11 @@ class RayDAPOTrainer(RayPPOTrainer):
         num_prompt_in_batch = 0
         num_gen_batches = 0
         for epoch in range(self.config.trainer.total_epochs):
-            self._create_priority_dataloader(epoch_idx=epoch)
+            train_dataset = self._create_priority_dataloader(epoch_idx=epoch)
             # create create the default_local_dir if not exists
             if not os.path.exists(self.config.trainer.default_local_dir):
                 os.makedirs(self.config.trainer.default_local_dir)
-            self.train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, 
+            train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, 
                 f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
@@ -437,6 +445,9 @@ class RayDAPOTrainer(RayPPOTrainer):
                 timing_raw = defaultdict(float)  # clear timing
 
                 metrics["train/num_gen_batches"] = num_gen_batches
+                metrics['train/num_prompts'] = len(train_dataset.dataframe)
+                metrics['train/perct_dropped_prompts'] = 100 * ( (len(self.train_dataset.dataframe) - len(train_dataset.dataframe)) / len(self.train_dataset.dataframe))
+                metrics['train/epoch'] = epoch
                 batch = None
                 num_prompt_in_batch = 0
                 num_gen_batches = 0

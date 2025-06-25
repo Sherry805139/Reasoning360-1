@@ -50,7 +50,7 @@ math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
-amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
+math_indistribution_test_path=${TEST_DATA_DIR}/math__combined_1k.parquet
 
 # Code (train)
 leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
@@ -93,7 +93,7 @@ gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
 train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path,aime_test_path,amc_test_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}']"
 
 
 # =================== Model ===================
