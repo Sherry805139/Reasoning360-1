@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sft-32kgen-rl-cliphigher-qwen32b-amthink
+#SBATCH --job-name=sft-16kgen-rl-cliphigher-qwen32b-amthink
 #SBATCH --partition=main
 #SBATCH --account=iq
 #SBATCH --nodes=16
@@ -15,7 +15,7 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME="347376-sft-16kgen-rl-cliphigher-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
 export STEM_LLM_JUDGE_URL="http://10.24.1.180:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -139,7 +139,7 @@ BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/ch
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
+WANDB_EXPERIMENT_NAME=347376-sft-16kgen-rl-cliphigher-qwen32b-amthink # ${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -187,7 +187,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 32))
+max_response_length=$((1024 * 16))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -213,8 +213,8 @@ gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up model forward & backward but note memory overflow
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up modelforward, but note memory overflow
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up modelforward, but note memory overflow
 offload=True
 
 n_resp_per_prompt_val=1
