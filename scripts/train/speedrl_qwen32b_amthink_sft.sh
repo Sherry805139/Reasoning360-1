@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=speedrl-16kgen-sft-cliphigh-qwen32b-amthink
+#SBATCH --job-name=speedrl-64node-32kgen-sft-cliphigh-qwen32b-amthink
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
-#SBATCH --nodes=16
-#SBATCH --ntasks=16
+#SBATCH --nodes=64
+#SBATCH --ntasks=64
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -159,7 +159,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -169,7 +169,7 @@ loss_agg_mode="token-mean"
 enable_filter_groups=True
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 # n_resp_per_prompt=16
 train_prompt_mini_bsz=64  # model grad update batchsize
