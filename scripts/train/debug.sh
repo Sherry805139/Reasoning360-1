@@ -1,22 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name=example-multinode-rl-qwen7b-instruct
+#SBATCH --job-name=debug
 #SBATCH --partition=main
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
-#SBATCH --account=iq
-#SBATCH --mem=512G
+#SBATCH --mem=1024G
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
+#SBATCH --account=iq
 
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.81:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="http://10.24.2.80:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -25,8 +25,6 @@ export NCCL_IBEXT_DISABLE=1
 export NCCL_NVLS_ENABLE=1
 export NCCL_IB_HCA=mlx5
 export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
-export TRITON_HOME="/tmp/triton_cache"
-# export SANDBOX_FUSION_SERVERS="fs-mbz-cpu-002"
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -44,17 +42,16 @@ export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
-# SHARED_DATA_PATH=./data
 SHARED_DATA_PATH=/mnt/sharefs/users/chengqian.gao/guru
 TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_1k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
-amc_test_path=${TEST_DATA_DIR}/math__amc_repeated_4x_332.parquet
+math_indistribution_test_path=${TEST_DATA_DIR}/math__combined_1k.parquet
 
 # Code (train)
 leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
@@ -74,47 +71,38 @@ graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_1.2k.parquet
 ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_1.9k.parquet
 zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_1.3k.parquet
 # Logic (test)
-zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
+zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300.parquet
 ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150.parquet
 
 # Simulation (train)
 codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_3.7k.parquet
 # Simulation (test)
-codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_200.parquet
-arcagi1_test_path=${TEST_DATA_DIR}/logic__arcagi1_400.parquet
+codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500.parquet
+arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
 
 # Table (train)
 hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
 multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
 # Table (test)
-multihier_test_path=${TEST_DATA_DIR}/table__multihier_336.parquet
-hitab_test_path=${TEST_DATA_DIR}/table__hitab_1k.parquet
+multihier_test_path=${TEST_DATA_DIR}/table__multihier_300.parquet
+hitab_test_path=${TEST_DATA_DIR}/table__hitab_300.parquet
 
 # Stem (train)
 webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 # Stem (test)
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
-supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_1k.parquet
+supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-# OOD (test) - Out of distribution evaluation
-ifeval_test_path=${TEST_DATA_DIR}/ood__ifeval_541.parquet
-livebench_data_test_path=${TEST_DATA_DIR}/ood__livebench_data_analysis_150.parquet
-livebench_lang_test_path=${TEST_DATA_DIR}/ood__livebench_language_140.parquet
-livebench_reasoning_test_path=${TEST_DATA_DIR}/ood__livebench_reasoning_150.parquet
+train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}']"
 
-# All training files across all domains
-train_files="['${math_train_path}']"
-
-# All test files across all domains
-test_files="['${math_test_path}', '${aime_test_path}']"
 
 # =================== Model ===================
-# BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
-BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
-
+BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}_debug
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -162,7 +150,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 8))
+max_response_length=$((1024 * 12))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -172,10 +160,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
-train_prompt_mini_bsz=32  # model grad update batchsize
+n_resp_per_prompt=4
+train_prompt_mini_bsz=8  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
@@ -184,7 +172,7 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Mathematically equivalent
 sp_size=1
-gen_tp=1
+gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
@@ -260,19 +248,20 @@ offload=True
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    reward_model.reward_manager=async_dapo \
+    reward_model.reward_manager=async_dapo  \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
     reward_model.overlong_buffer.penalty_factor=${overlong_penalty_factor} \
+    reward_model.launch_reward_fn_async=False \
     trainer.logger=['console','wandb'] \
-    trainer.project_name=${WANDB_PROJECT} \
+    trainer.project_name=${WANDB_PROJECT}\
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
-    trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
     trainer.save_freq=50 \
-    trainer.test_freq=50 \
-    trainer.total_epochs=5 \
+    trainer.test_freq=10 \
+    trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
-    trainer.resume_mode=auto 
+    trainer.resume_mode=auto \
+    +trainer.pass_rate_threshold=0.9 

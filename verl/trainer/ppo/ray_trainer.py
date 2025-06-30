@@ -30,6 +30,7 @@ from pprint import pprint
 from typing import Dict, Optional, Type
 
 import numpy as np
+import pandas as pd
 import ray
 import torch
 from codetiming import Timer
@@ -600,6 +601,15 @@ class RayPPOTrainer:
         except Exception as e:
             print(f"Warning: Could not set total_training_steps in config. Structure missing? Error: {e}")
 
+        self.pre_train_dataloader = StatefulDataLoader(
+            dataset=self.train_dataset,
+            batch_size=val_batch_size,
+            num_workers=self.config.data.get("dataloader_num_workers", 8),
+            shuffle=False,
+            drop_last=False,
+            collate_fn=collate_fn,
+        )
+
     def _dump_generations(self, inputs, outputs, scores, reward_extra_infos_dict, dump_path):
         """Dump rollout/validation samples as JSONL."""
         os.makedirs(dump_path, exist_ok=True)
@@ -647,6 +657,170 @@ class RayPPOTrainer:
 
         # Log to each configured logger
         self.validation_generations_logger.log(self.config.trainer.logger, samples, self.global_steps)
+
+    def _validate_training_data(self):
+        data_source_lst = []
+        dataset_lst = []
+        reward_extra_infos_dict: dict[str, list] = defaultdict(list)
+
+        # Lists to collect samples for the table
+        sample_inputs = []
+        sample_outputs = []
+        sample_scores = []
+
+        print(f"Starting to validate training data")
+        for test_data in self.pre_train_dataloader:
+            test_batch = DataProto.from_single_dict(test_data)
+            # NOTE: print statements in this loop added by Reasoning360 are temporarily disabled
+            # print(f"Shape of test_batch: {test_batch.batch['input_ids'].shape}")
+
+            # repeat test batch, use a small number 4 for now, only remove the all correct case
+            test_batch = test_batch.repeat(repeat_times=4, interleave=True)
+
+            # we only do validation on rule-based rm
+            if self.config.reward_model.enable and test_batch[0].non_tensor_batch["reward_model"]["style"] == "model":
+                # print(f"EXITING VALIDATION HERE BECAUSE {self.config.reward_model.enable=} and {test_batch[0].non_tensor_batch['reward_model']['style']=}")
+                return {}
+
+            # Store original inputs
+            input_ids = test_batch.batch["input_ids"]
+            # TODO: Can we keep special tokens except for padding tokens?
+            input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
+            sample_inputs.extend(input_texts)
+
+            batch_keys_to_pop = ["input_ids", "attention_mask", "position_ids"]
+            non_tensor_batch_keys_to_pop = ["raw_prompt_ids"]
+            if "multi_modal_data" in test_batch.non_tensor_batch:
+                non_tensor_batch_keys_to_pop.append("multi_modal_data")
+            if "raw_prompt" in test_batch.non_tensor_batch:
+                non_tensor_batch_keys_to_pop.append("raw_prompt")
+            if "tools_kwargs" in test_batch.non_tensor_batch:
+                non_tensor_batch_keys_to_pop.append("tools_kwargs")
+            test_gen_batch = test_batch.pop(
+                batch_keys=batch_keys_to_pop,
+                non_tensor_batch_keys=non_tensor_batch_keys_to_pop,
+            )
+
+            test_gen_batch.meta_info = {
+                "eos_token_id": self.tokenizer.eos_token_id,
+                "pad_token_id": self.tokenizer.pad_token_id,
+                "recompute_log_prob": False,
+                "do_sample": self.config.actor_rollout_ref.rollout.val_kwargs.do_sample,
+                "validate": True,
+            }
+            print(f"test_gen_batch meta info: {test_gen_batch.meta_info}")
+
+            # pad to be divisible by dp_size
+            test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
+            if not self.async_rollout_mode:
+                test_output_gen_batch_padded = self.actor_rollout_wg.generate_sequences(test_gen_batch_padded)
+            else:
+                self.async_rollout_manager.wake_up()
+                test_output_gen_batch_padded = self.async_rollout_manager.generate_sequences(test_gen_batch_padded)
+                self.async_rollout_manager.sleep()
+
+            # unpad
+            test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
+            print("validation generation end")
+
+            # Store generated outputs
+            output_ids = test_output_gen_batch.batch["responses"]
+            output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
+            sample_outputs.extend(output_texts)
+
+            test_batch = test_batch.union(test_output_gen_batch)
+
+            # evaluate using reward_function
+            result = self.val_reward_fn(test_batch, return_dict=True)
+            reward_tensor = result["reward_tensor"]
+            scores = reward_tensor.sum(-1).cpu().tolist()
+            print(f"Shape of reward_tensor: {reward_tensor.shape}")
+            print(f"scores (first 100): {scores[:100]}")
+            
+            sample_scores.extend(scores)
+            
+            # compute the pass rate for the batch 
+            temp_df = pd.DataFrame({
+                "prompt_id": test_batch.non_tensor_batch["prompt_id"],
+                "on_policy_pass_rate": scores 
+            })
+            print(f"temp_df: {temp_df}")
+            pass_rate_df = temp_df.groupby("prompt_id", as_index=False)["on_policy_pass_rate"].mean().set_index('prompt_id')[['on_policy_pass_rate']]
+            self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
+            self.train_dataset.dataframe.update(pass_rate_df)
+            self.train_dataset.dataframe = self.train_dataset.dataframe.reset_index()
+                        
+
+            reward_extra_infos_dict["reward"].extend(scores)
+            if "reward_extra_info" in result:
+                for key, lst in result["reward_extra_info"].items():
+                    reward_extra_infos_dict[key].extend(lst)
+
+            # NOTE: Added by Reasoning360: Collect dataset information. TODO: maybe replicated usage with the data_source_lst and can be removed?
+            datasets = []
+            for i in range(reward_tensor.shape[0]):
+                dataset = "unknown"
+                if "extra_info" in test_batch.non_tensor_batch:
+                    extra_info = test_batch.non_tensor_batch["extra_info"][i]
+                    if isinstance(extra_info, dict) and "dataset" in extra_info:
+                        dataset = extra_info["dataset"]
+                datasets.append(dataset)
+            dataset_lst.append(np.array(datasets))
+
+            data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
+
+        self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
+
+        # dump generations
+        val_data_dir = self.config.trainer.get("validation_data_dir", None)
+        if val_data_dir:
+            self._dump_generations(
+                inputs=sample_inputs,
+                outputs=sample_outputs,
+                scores=sample_scores,
+                reward_extra_infos_dict=reward_extra_infos_dict,
+                dump_path=val_data_dir,
+            )
+
+        for key_info, lst in reward_extra_infos_dict.items():
+            assert len(lst) == 0 or len(lst) == len(sample_scores), f"{key_info}: {len(lst)=}, {len(sample_scores)=}"
+
+        data_sources = np.concatenate(data_source_lst, axis=0)
+        datasets = np.concatenate(dataset_lst, axis=0)  # Concatenate datasets
+
+        data_src2var2metric2val = process_validation_metrics(data_sources, sample_inputs, reward_extra_infos_dict)
+        metric_dict = {}
+        for data_source, var2metric2val in data_src2var2metric2val.items():
+            core_var = "acc" if "acc" in var2metric2val else "reward"
+            for var_name, metric2val in var2metric2val.items():
+                n_max = max([int(name.split("@")[-1].split("/")[0]) for name in metric2val.keys()])
+                for metric_name, metric_val in metric2val.items():
+                    # NOTE: Added by Reasoning360: Add std to the metric name.
+                    if (var_name == core_var) and any(metric_name.startswith(pfx) for pfx in ["mean", "maj", "best", "std"]) and (f"@{n_max}" in metric_name):
+                        metric_sec = "val-training-core"
+                    else:
+                        metric_sec = "val-training-aux"
+                    pfx = f"{metric_sec}/{data_source}/{var_name}/{metric_name}"
+                    metric_dict[pfx] = metric_val
+
+        print(f"Training data validation complete")
+
+        # # Calculate the mean reward for each data source and dataset
+        # data_source_dataset_reward = {}
+        # for i in range(len(sample_scores)):
+        #     data_source = data_sources[i]
+        #     dataset = datasets[i]
+        #     key = (data_source, dataset)
+        #     if key not in data_source_dataset_reward:
+        #         data_source_dataset_reward[key] = []
+        #     data_source_dataset_reward[key].append(sample_scores[i])
+
+        # # Record the mean reward for each data source and dataset
+        # for (data_source, dataset), rewards in data_source_dataset_reward.items():
+        #     metric_dict[f"val/test_score/{data_source}/{dataset}"] = np.mean(rewards)
+            
+        return 
+
 
     def _validate(self):
         data_source_lst = []

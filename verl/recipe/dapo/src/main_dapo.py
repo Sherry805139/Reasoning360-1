@@ -190,6 +190,7 @@ class TaskRunner:
                                  reward_fn=reward_fn,
                                  val_reward_fn=val_reward_fn)
         trainer.init_workers()
+        # perform validation on the training data for data filtering
         trainer.fit()
 
 

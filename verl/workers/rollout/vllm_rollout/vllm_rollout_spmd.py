@@ -298,6 +298,13 @@ class vLLMRollout(BaseRollout):
         if "num_samples" in prompts.meta_info:
             kwargs["n"] = prompts.meta_info["num_samples"]
 
+        # Check for response_length override in meta_info (like HF rollout does)
+        if "response_length" in prompts.meta_info:
+            response_length = prompts.meta_info["response_length"]
+            kwargs["max_tokens"] = response_length
+            print(f"vLLM rollout (SPMD): Overriding max_tokens to meta_info ({response_length})")
+        print(f"kwargs by 360 (SPMD): {kwargs}")
+
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs), self.timer() as t:
             outputs = self.inference_engine.generate(

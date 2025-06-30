@@ -50,62 +50,116 @@ class RayDAPOTrainer(RayPPOTrainer):
         from verl.trainer.main_ppo import create_rl_sampler
         from verl.utils.dataset.rl_dataset import collate_fn
         from torchdata.stateful_dataloader import StatefulDataLoader
-        if epoch_idx == 0 or self.config.trainer.pass_rate_threshold == 1.0: 
-            # epoch_idx == 0: re-create the dataloader for the whole dataset, with RandomSampler if data_config.shuffle else SequentialSampler;
-            train_sampler = create_rl_sampler(self.config.data, self.train_dataset)
-            self.train_dataloader = StatefulDataLoader(
-                dataset=self.train_dataset,
-                batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
-                num_workers=self.config.data.get("dataloader_num_workers", 8),
-                drop_last=True,
-                collate_fn=collate_fn,
-                sampler=train_sampler,
-            )
-            assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
-            assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
-
-            return self.train_dataset
-        else:
-            # first copy the self.train_dataset, make sure the original dataset is not modified
-            # then select and sort the subsamples from the whole self.train_dataset.dataframe
-            # finally create the dataloader based on the selected dataframe (with a new SequentialSampler)
+        
+        if epoch_idx == 0:# or self.config.trainer.pass_rate_threshold == 1.0: 
+            # Use whole dataset with random/sequential sampler
+            
+            # DEBUG: Generate random pass rates between 0 and 1
+            np.random.seed(42)  # For reproducible debugging
+            # random_pass_rates = np.random.uniform(0, 1, len(self.train_dataset.dataframe))
+            random_pass_rates = np.random.uniform(0.7, 0.8, len(self.train_dataset.dataframe))
+            self.train_dataset.dataframe["on_policy_pass_rate"] = random_pass_rates
+            print(f"DEBUG: Generated {len(random_pass_rates)} random pass rates between 0 and 1")
+            print(f"DEBUG: Pass rate stats - min: {random_pass_rates.min():.3f}, max: {random_pass_rates.max():.3f}, mean: {random_pass_rates.mean():.3f}")
+            
+            # Sort by pass rate (fixed: was using undefined filtered_df)
+            filtered_df = self.train_dataset.dataframe.sort_values(by="on_policy_pass_rate", ascending=False).reset_index(drop=True)
+            
             train_dataset_copy = deepcopy(self.train_dataset)
-            train_dataset_copy.dataframe = (
-                self.train_dataset.dataframe
-                .loc[
-                    (self.train_dataset.dataframe["on_policy_pass_rate"] > 0.1) &
-                    (self.train_dataset.dataframe["on_policy_pass_rate"] < self.config.trainer.pass_rate_threshold)
-                ]
-                .sort_values(by="on_policy_pass_rate", ascending=False)
-                .reset_index(drop=True)
-            )
-            # re-create the self.train_dataset from the selected dataframe
-            sequential_sampler = SequentialSampler(data_source=train_dataset_copy.dataframe)
+            train_dataset_copy.dataframe = filtered_df
+
             self.train_dataloader = StatefulDataLoader(
                 dataset=train_dataset_copy,
                 batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
                 num_workers=self.config.data.get("dataloader_num_workers", 8),
                 drop_last=True,
                 collate_fn=collate_fn,
-                sampler=sequential_sampler,
             )
-            discarded = len(self.train_dataset.dataframe) - len(train_dataset_copy.dataframe)
-            pct = 100 * discarded / len(self.train_dataset.dataframe)
-
-            print(f"Dataset filtering statistics for epoch {epoch_idx}:")
-            print(f"Original dataset size: {len(self.train_dataset.dataframe)}")
-            print(f"Filtered dataset size: {len(train_dataset_copy.dataframe)}")
-            print(f"Discarded data points: {discarded}")
-            print(f"Percentage discarded: {pct:.2f}%")
-
-            print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
-            # we untouch the setup of actor_rollout_ref.actor.optim. etc.
-            # reference: verl/trainer/ppo/ray_trainer.py -> _create_dataloader()
 
             assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
             assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
+            return self.train_dataset
 
-            return train_dataset_copy
+        # New filtering strategy: 
+        # - pass_rate == 1.0: keep 1/5 randomly
+        # - pass_rate == 0.0: keep 1/2 randomly  
+        # - others: keep all
+        
+        original_df = self.train_dataset.dataframe.copy()
+        
+        # Separate data by pass rate
+        perfect_mask = original_df["on_policy_pass_rate"] == 1.0
+        failed_mask = original_df["on_policy_pass_rate"] == 0.0
+        medium_mask = (original_df["on_policy_pass_rate"] > 0.0) & (original_df["on_policy_pass_rate"] < 1.0)
+        
+        # Keep all medium difficulty data
+        kept_indices = []
+        kept_indices.extend(original_df[medium_mask].index.tolist())
+        
+        # Randomly sample 1/5 of perfect examples
+        perfect_indices = original_df[perfect_mask].index.tolist()
+        if perfect_indices:
+            np.random.seed(42 + epoch_idx)  # Ensure reproducibility but vary by epoch
+            n_keep_perfect = max(1, len(perfect_indices) // 5)  # Keep at least 1 if any exist
+            n_keep_perfect = min(n_keep_perfect, len(perfect_indices))  # Don't sample more than available
+            kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
+            kept_indices.extend(kept_perfect.tolist())
+        
+        # Randomly sample 1/2 of failed examples
+        failed_indices = original_df[failed_mask].index.tolist()
+        if failed_indices:
+            np.random.seed(43 + epoch_idx)  # Different seed for failed examples
+            n_keep_failed = max(1, len(failed_indices) // 2)  # Keep at least 1 if any exist
+            n_keep_failed = min(n_keep_failed, len(failed_indices))  # Don't sample more than available
+            kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
+            kept_indices.extend(kept_failed.tolist())
+        
+        # Create filtered dataset
+        filtered_df = original_df.loc[kept_indices].reset_index(drop=True)
+        
+        # Sort by score from high to low
+        filtered_df = filtered_df.sort_values(by="on_policy_pass_rate", ascending=False).reset_index(drop=True)
+        
+        # Create filtered dataset copy
+        train_dataset_copy = deepcopy(self.train_dataset)
+        train_dataset_copy.dataframe = filtered_df
+        
+        # Create dataloader
+        self.train_dataloader = StatefulDataLoader(
+            dataset=train_dataset_copy,
+            batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
+            num_workers=self.config.data.get("dataloader_num_workers", 8),
+            drop_last=True,
+            collate_fn=collate_fn,
+            sampler=SequentialSampler(data_source=filtered_df),
+        )
+        
+        # Log filtering statistics
+        n_perfect_original = len(perfect_indices)
+        n_failed_original = len(failed_indices) 
+        n_medium_original = len(original_df[medium_mask])
+        n_perfect_kept = len([i for i in kept_indices if i in perfect_indices])
+        n_failed_kept = len([i for i in kept_indices if i in failed_indices])
+        n_medium_kept = len([i for i in kept_indices if original_df.loc[i, "on_policy_pass_rate"] > 0 and original_df.loc[i, "on_policy_pass_rate"] < 1])
+        
+        discarded = len(original_df) - len(filtered_df)
+        pct = 100 * discarded / len(original_df)
+
+        print(f"Dataset filtering statistics for epoch {epoch_idx}:")
+        print(f"Original dataset size: {len(original_df)}")
+        print(f"  - Perfect examples (pass_rate=1.0): {n_perfect_original} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,n_perfect_original)*100:.1f}%)")
+        print(f"  - Failed examples (pass_rate=0.0): {n_failed_original} -> {n_failed_kept} kept ({n_failed_kept/max(1,n_failed_original)*100:.1f}%)")  
+        print(f"  - Medium examples (0<pass_rate<1): {n_medium_original} -> {n_medium_kept} kept (100.0%)")
+        print(f"Filtered dataset size: {len(filtered_df)}")
+        print(f"Total discarded data points: {discarded}")
+        print(f"Total percentage discarded: {pct:.2f}%")
+
+        print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
+
+        assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
+        assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
+
+        return train_dataset_copy
 
     def fit(self):
         """
@@ -125,6 +179,9 @@ class RayDAPOTrainer(RayPPOTrainer):
 
         # load checkpoint before doing anything
         self._load_checkpoint()
+
+        # perform validation on the training data for data filtering
+        # self._validate_training_data()
 
         # perform validation before training
         # currently, we only support validation using the reward_function.
@@ -147,7 +204,10 @@ class RayDAPOTrainer(RayPPOTrainer):
         num_prompt_in_batch = 0
         num_gen_batches = 0
         for epoch in range(self.config.trainer.total_epochs):
-            train_dataset = self._create_priority_dataloader(epoch_idx=epoch)
+            if self.config.trainer.vary_length:
+                train_dataset = self._create_priority_dataloader(epoch_idx=epoch)
+            else:
+                train_dataset = self.train_dataset
             # create create the default_local_dir if not exists
             if not os.path.exists(self.config.trainer.default_local_dir):
                 os.makedirs(self.config.trainer.default_local_dir)
@@ -155,6 +215,23 @@ class RayDAPOTrainer(RayPPOTrainer):
                 f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
+                if self.config.trainer.vary_length:
+                    # Get the average previous pass rate for this batch at the beginning
+                    batch_prompt_ids = batch_dict["prompt_id"]
+                    unique_prompt_ids = np.unique(batch_prompt_ids)
+                    
+                    # Get existing pass rates from dataset
+                    existing_pass_rates = []
+                    for prompt_id in unique_prompt_ids:
+                        existing_rate = self.train_dataset.dataframe[self.train_dataset.dataframe['prompt_id'] == prompt_id]['on_policy_pass_rate'].iloc[0]
+                        existing_pass_rates.append(existing_rate)
+                    
+                    # Calculate average of previous pass rates for this batch
+                    avg_on_policy_pass_rate = np.mean(existing_pass_rates)
+                    batch_gen_length = 1024 * 24 * (1-avg_on_policy_pass_rate) + 1024*4
+                    print(f"Average previous on-policy pass rate for this batch: {avg_on_policy_pass_rate:.4f}")
+                    print(f"Batch max gen length: {batch_gen_length}")
+                
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
                 # len(self.train_dataloader) * #GPUs = len(self.train_dataset)
@@ -176,6 +253,11 @@ class RayDAPOTrainer(RayPPOTrainer):
                     batch_keys=batch_keys_to_pop,
                     non_tensor_batch_keys=non_tensor_batch_keys_to_pop,
                 )
+                
+                if self.config.trainer.vary_length:
+                    # Set the generation length in meta_info
+                    gen_batch.meta_info["response_length"] = int(batch_gen_length)
+                    print(f"Set gen_batch.meta_info['response_length'] to {int(batch_gen_length)}")
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
@@ -389,7 +471,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                         self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
                         self.train_dataset.dataframe.update(pass_rate_df)
                         self.train_dataset.dataframe = self.train_dataset.dataframe.reset_index()
-                        
+
                     # update critic
                     if self.use_critic:
                         with _timer('update_critic', timing_raw):

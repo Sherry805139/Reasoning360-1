@@ -113,7 +113,7 @@ test_files="['${math_test_path}', '${aime_test_path}']"
 BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
 
 # =================== Logging ===================
-WANDB_PROJECT=Reasoning360
+WANDB_PROJECT=Difficulty-Aware-RL
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
@@ -172,7 +172,7 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=16
 train_prompt_mini_bsz=32  # model grad update batchsize

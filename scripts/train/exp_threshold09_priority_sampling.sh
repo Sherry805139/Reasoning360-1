@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=PrioritySamplingThreshold09-Qwen2.5-7B-Dsitialled
+#SBATCH --job-name=PrioritySampling-Qwen2.5-7B-Dsitialled
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -47,7 +47,7 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_10k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_1k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -99,10 +99,10 @@ test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_te
 
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
-CONDA_BIN_PATH=/mnt/weka/home/chengqian.gao/.envs/reasoning360/bin/
+CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
-WANDB_PROJECT=PrioritySampling
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}
+WANDB_PROJECT=Difficulty-Aware-RL
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}_1k
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -150,7 +150,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 12))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -256,13 +256,12 @@ offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT}\
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=50 \
-    trainer.test_freq=2 \
+    trainer.test_freq=10 \
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
-    +trainer.pass_rate_threshold=0.9 \
-    trainer.default_local_dir='/mnt/sharefs/users/chengqian.gao/priority_sampling_qwen25_7b_dist_threshold_09' $@
+    +trainer.pass_rate_threshold=0.9 
