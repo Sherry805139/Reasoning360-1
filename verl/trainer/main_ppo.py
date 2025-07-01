@@ -189,17 +189,14 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor):
         config=data_config,
     )
     # create a new feature called "prompt_id" to identify the prompt
-    def generate_prompt_id(prompt_text):
-        # Convert the prompt text to bytes
-        prompt_bytes = prompt_text.encode('utf-8')
-        
-        # Generate a SHA-256 hash of the prompt text
-        sha256_hash = hashlib.sha256(prompt_bytes).hexdigest()
-        
-        return sha256_hash 
+    def generate_simple_prompt_id(data_source, extra_info):
+        """Generate a simple unique prompt ID using data_source + split + index"""
+        split = extra_info.get("split", "unknown")
+        index = extra_info.get("index", 0)
+        return f"{data_source}_{split}_{index}"
 
-    dataset.dataframe["prompt_id"] = dataset.dataframe["extra_info"].map(
-        lambda x: generate_prompt_id(x["original_question"])
+    dataset.dataframe["prompt_id"] = dataset.dataframe.apply(
+        lambda row: generate_simple_prompt_id(row["data_source"], row["extra_info"]), axis=1
         )
     dataset.dataframe["on_policy_pass_rate"] = 0.0
     return dataset

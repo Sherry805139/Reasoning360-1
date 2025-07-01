@@ -11,7 +11,7 @@
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
-#SBATCH --account=iq
+#SBATCH --account=ad
 
 
 # =================== Frequently Used Variables ===================
@@ -93,12 +93,12 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}']"
+train_files="['${math_train_path}', '${leetcode_train_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}']"
 
 
 # =================== Model ===================
-BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-instruct-am_think_v1_distilled
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
@@ -264,4 +264,4 @@ offload=True
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
-    +trainer.pass_rate_threshold=0.9 
+    +trainer.vary_length=True 

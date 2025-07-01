@@ -667,6 +667,7 @@ class RayPPOTrainer:
         sample_inputs = []
         sample_outputs = []
         sample_scores = []
+        sample_generation_lengths = []  # Add list to collect token-based generation lengths
 
         print(f"Starting to validate training data")
         for test_data in self.pre_train_dataloader:
@@ -769,6 +770,13 @@ class RayPPOTrainer:
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
+            # Collect generation lengths
+            # Calculate token-based generation lengths using response masks
+            response_length = test_batch.batch["responses"].shape[-1]  # Get response length dimension
+            response_mask = test_batch.batch["attention_mask"][:, -response_length:]  # Get response portion of attention mask
+            generation_lengths = response_mask.sum(dim=-1).cpu().tolist()  # Actual token lengths per response
+            sample_generation_lengths.extend(generation_lengths)
+
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
         # dump generations
@@ -805,19 +813,19 @@ class RayPPOTrainer:
 
         print(f"Training data validation complete")
 
-        # # Calculate the mean reward for each data source and dataset
-        # data_source_dataset_reward = {}
-        # for i in range(len(sample_scores)):
-        #     data_source = data_sources[i]
-        #     dataset = datasets[i]
-        #     key = (data_source, dataset)
-        #     if key not in data_source_dataset_reward:
-        #         data_source_dataset_reward[key] = []
-        #     data_source_dataset_reward[key].append(sample_scores[i])
-
-        # # Record the mean reward for each data source and dataset
-        # for (data_source, dataset), rewards in data_source_dataset_reward.items():
-        #     metric_dict[f"val/test_score/{data_source}/{dataset}"] = np.mean(rewards)
+        # Calculate the average generation length for each data source
+        data_source_generation_lengths = {}
+        generation_lengths = sample_generation_lengths  # Use already collected token-based generation lengths
+        
+        for i in range(len(generation_lengths)):
+            data_source = data_sources[i]
+            if data_source not in data_source_generation_lengths:
+                data_source_generation_lengths[data_source] = []
+            data_source_generation_lengths[data_source].append(generation_lengths[i])
+        
+        # Record the average generation length for each data source
+        for data_source, lengths in data_source_generation_lengths.items():
+            metric_dict[f"val/avg_gen_length/{data_source}"] = np.mean(lengths)
             
         return 
 
@@ -831,6 +839,7 @@ class RayPPOTrainer:
         sample_inputs = []
         sample_outputs = []
         sample_scores = []
+        sample_generation_lengths = []  # Add list to collect token-based generation lengths
 
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
@@ -919,6 +928,13 @@ class RayPPOTrainer:
 
             data_source_lst.append(test_batch.non_tensor_batch.get("data_source", ["unknown"] * reward_tensor.shape[0]))
 
+            # Collect generation lengths
+            # Calculate token-based generation lengths using response masks
+            response_length = test_batch.batch["responses"].shape[-1]  # Get response length dimension
+            response_mask = test_batch.batch["attention_mask"][:, -response_length:]  # Get response portion of attention mask
+            generation_lengths = response_mask.sum(dim=-1).cpu().tolist()  # Actual token lengths per response
+            sample_generation_lengths.extend(generation_lengths)
+
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
 
         # dump generations
@@ -953,19 +969,19 @@ class RayPPOTrainer:
                     pfx = f"{metric_sec}/{data_source}/{var_name}/{metric_name}"
                     metric_dict[pfx] = metric_val
                     
-        # Calculate the mean reward for each data source and dataset
-        data_source_dataset_reward = {}
-        for i in range(len(sample_scores)):
+        # Calculate the average generation length for each data source
+        data_source_generation_lengths = {}
+        generation_lengths = sample_generation_lengths  # Use already collected token-based generation lengths
+        
+        for i in range(len(generation_lengths)):
             data_source = data_sources[i]
-            dataset = datasets[i]
-            key = (data_source, dataset)
-            if key not in data_source_dataset_reward:
-                data_source_dataset_reward[key] = []
-            data_source_dataset_reward[key].append(sample_scores[i])
-
-        # Record the mean reward for each data source and dataset
-        for (data_source, dataset), rewards in data_source_dataset_reward.items():
-            metric_dict[f"val/test_score/{data_source}/{dataset}"] = np.mean(rewards)
+            if data_source not in data_source_generation_lengths:
+                data_source_generation_lengths[data_source] = []
+            data_source_generation_lengths[data_source].append(generation_lengths[i])
+        
+        # Record the average generation length for each data source
+        for data_source, lengths in data_source_generation_lengths.items():
+            metric_dict[f"val/avg_gen_length/{data_source}"] = np.mean(lengths)
             
         return metric_dict
 

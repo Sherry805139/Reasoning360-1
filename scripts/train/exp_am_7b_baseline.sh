@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=Difficulty-Aware-RL-Baseline
+#SBATCH --job-name=DiffAware-Baseline-math-code
 #SBATCH --partition=main
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=8
+#SBATCH --ntasks=8
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -47,7 +47,7 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_10k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -93,12 +93,12 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}']"
+train_files="['${math_train_path}', '${leetcode_train_path}', '${livecodebench_train_path}']"  
+test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}']"
 
 
 # =================== Model ===================
-BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-instruct-am_think_v1_distilled
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
