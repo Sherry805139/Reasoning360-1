@@ -261,7 +261,6 @@ class RayDAPOTrainer(RayPPOTrainer):
                     batch_gen_length = avg_on_policy_avg_length + (max_response_length - avg_on_policy_avg_length) * (1 - avg_on_policy_pass_rate)
                     batch_gen_length = min(batch_gen_length, max_response_length)  # Cap at max response length
                     
-                    metrics = {}
                     print(f"Average previous on-policy pass rate for this batch: {avg_on_policy_pass_rate:.4f}")
                     print(f"Average previous on-policy avg length for this batch: {avg_on_policy_avg_length:.1f}")
                     print(f"Batch max gen length: {batch_gen_length:.1f} (max allowed: {max_response_length})")
