@@ -236,6 +236,8 @@ class RayDAPOTrainer(RayPPOTrainer):
                 f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
+                metrics = {}
+
                 if self.config.trainer.vary_length:
                     # Get the average previous pass rate for this batch at the beginning
                     batch_prompt_ids = batch_dict["prompt_id"]
@@ -259,15 +261,19 @@ class RayDAPOTrainer(RayPPOTrainer):
                     batch_gen_length = avg_on_policy_avg_length + (max_response_length - avg_on_policy_avg_length) * (1 - avg_on_policy_pass_rate)
                     batch_gen_length = min(batch_gen_length, max_response_length)  # Cap at max response length
                     
+                    metrics = {}
                     print(f"Average previous on-policy pass rate for this batch: {avg_on_policy_pass_rate:.4f}")
                     print(f"Average previous on-policy avg length for this batch: {avg_on_policy_avg_length:.1f}")
                     print(f"Batch max gen length: {batch_gen_length:.1f} (max allowed: {max_response_length})")
+                    metrics['train/on_policy_pass_rate(mean)'] = avg_on_policy_pass_rate
+                    metrics['train/on_policy_avg_length(mean)'] = avg_on_policy_avg_length
+                    
                 
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
                 # len(self.train_dataloader) * #GPUs = len(self.train_dataset)
                 # (bsz, seq_len)
-                metrics = {}
+                
 
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 num_gen_batches += 1
@@ -287,8 +293,14 @@ class RayDAPOTrainer(RayPPOTrainer):
                 
                 if self.config.trainer.vary_length:
                     # Set the generation length in meta_info
-                    gen_batch.meta_info["response_length"] = int(batch_gen_length)
-                    print(f"Set gen_batch.meta_info['response_length'] to {int(batch_gen_length)}")
+                    gen_batch.meta_info["target_max_response_length"] = int(batch_gen_length)
+                    new_batch.meta_info["target_max_response_length"] = int(batch_gen_length)
+                    print(f"Set gen_batch.meta_info['target_max_response_length'] to {int(batch_gen_length)}")
+                    metrics['train/target_max_response_length'] = batch_gen_length
+                else:
+                    gen_batch.meta_info["target_max_response_length"] = int(max_response_length)
+                    new_batch.meta_info["target_max_response_length"] = int(max_response_length)
+                    metrics['train/target_max_response_length'] = max_response_length
 
                 is_last_step = self.global_steps >= self.total_training_steps
 

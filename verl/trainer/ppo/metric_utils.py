@@ -110,10 +110,15 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
     advantages = batch.batch["advantages"]
     returns = batch.batch["returns"]
 
-    max_response_length = batch.batch["responses"].shape[-1]
+    max_response_length_for_mask = batch.batch["responses"].shape[-1]   # This is not the actual max value of response lengths, only for masking purposes.
 
-    prompt_mask = batch.batch["attention_mask"][:, :-max_response_length].bool()
-    response_mask = batch.batch["attention_mask"][:, -max_response_length:].bool()
+    if batch.meta_info.get("target_max_response_length", None) is not None: # The actual max response length used in the rollout.
+        max_response_length = batch.meta_info["target_max_response_length"]
+    else:
+        raise ValueError("target_max_response_length not found in batch.meta_info. Please ensure it is set during rollout.")
+    
+    prompt_mask = batch.batch["attention_mask"][:, :-max_response_length_for_mask].bool()
+    response_mask = batch.batch["attention_mask"][:, -max_response_length_for_mask:].bool()
 
     max_prompt_length = prompt_mask.size(-1)
 
