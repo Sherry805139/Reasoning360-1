@@ -11,7 +11,7 @@
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
 #SBATCH --time=720:00:00
-#SBATCH --account=ad
+#SBATCH --account=iq
 
 
 # =================== Frequently Used Variables ===================
@@ -98,7 +98,8 @@ test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_te
 
 
 # =================== Model ===================
-BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-instruct-am_think_v1_distilled
+# BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-instruct-am_think_v1_distilled
+BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
@@ -160,7 +161,7 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
+train_prompt_bsz=24  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=4
 train_prompt_mini_bsz=8  # model grad update batchsize
@@ -260,7 +261,7 @@ offload=True
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=50 \
-    trainer.test_freq=10 \
+    trainer.test_freq=2 \
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \

@@ -299,49 +299,143 @@ class vLLMRollout(BaseRollout):
             kwargs["n"] = prompts.meta_info["num_samples"]
 
         # Check for response_length override in meta_info (like HF rollout does)
+        individual_sampling_params = None
         if "response_length" in prompts.meta_info:
             response_length = prompts.meta_info["response_length"]
-            kwargs["max_tokens"] = response_length
-            print(f"vLLM rollout (SPMD): Overriding max_tokens to meta_info ({response_length})")
+            
+            # Handle both single value and list of response lengths
+            if isinstance(response_length, (list, np.ndarray)):
+                # Handle case where response_length list doesn't match batch_size due to data sharding/distribution
+                if len(response_length) != batch_size:
+                    if len(response_length) > batch_size:
+                        # For robustness, we should ideally align by prompt_id or other identifier
+                        # For now, slice the list to match batch_size (assumes consecutive distribution)
+                        response_length = response_length[:batch_size]
+                        print(f"vLLM rollout (SPMD): Sliced response_length from {len(prompts.meta_info['response_length'])} to {batch_size} to match batch_size")
+                        print(f"vLLM rollout (SPMD): Note - this assumes consecutive data distribution across workers")
+                    else:
+                        raise ValueError(f"response_length list length ({len(response_length)}) is smaller than batch_size ({batch_size})")
+                
+                # Set flag to use individual context manager approach
+                individual_sampling_params = True
+                print(f"vLLM rollout (SPMD): Using individual response lengths (range: {min(response_length)}-{max(response_length)})")
+            else:
+                # Single value case (backward compatibility)
+                kwargs["max_tokens"] = response_length
+                print(f"vLLM rollout (SPMD): Overriding max_tokens to meta_info ({response_length})")
+        
         print(f"kwargs by 360 (SPMD): {kwargs}")
 
         # users can customize different sampling_params at different run
-        with self.update_sampling_params(**kwargs), self.timer() as t:
-            outputs = self.inference_engine.generate(
-                prompts=vllm_inputs,  # because we have already convert it to prompt token id
-                sampling_params=self.sampling_params,
-                lora_request=lora_requests,
-                use_tqdm=False,
-            )
+        if individual_sampling_params is not None:
+            # Use context manager approach to create individual sampling params while maintaining batch efficiency
+            individual_sampling_params_list = []
+            
+            # Create individual sampling params using context manager approach (no rollback needed since we're not calling generate)
+            for length in response_length:
+                # Create kwargs for this specific prompt
+                individual_kwargs = kwargs.copy()
+                individual_kwargs["max_tokens"] = int(length)
+                
+                # Temporarily create a modified sampling params using the same logic as update_sampling_params
+                # Save current state
+                old_sampling_params_args = {}
+                for key, value in individual_kwargs.items():
+                    if hasattr(self.sampling_params, key):
+                        old_value = getattr(self.sampling_params, key)
+                        old_sampling_params_args[key] = old_value
+                        setattr(self.sampling_params, key, value)
+                
+                # Create a copy with current state (same as what update_sampling_params would use)
+                import copy
+                individual_sampling_param = copy.deepcopy(self.sampling_params)
+                individual_sampling_params_list.append(individual_sampling_param)
+                
+                # Restore original state
+                for key, value in old_sampling_params_args.items():
+                    setattr(self.sampling_params, key, value)
+            
+            # Now do batch inference with all prompts and individual sampling params
+            with self.timer() as t:
+                outputs = self.inference_engine.generate(
+                    prompts=vllm_inputs,
+                    sampling_params=individual_sampling_params_list,
+                    lora_request=lora_requests,
+                    use_tqdm=False,
+                )
+            print(f"individual_sampling_params: Using context manager approach with batch inference")
+            print(f"vLLM rollout (SPMD): Created {len(individual_sampling_params_list)} individual sampling params")
+            print(f"vLLM rollout (SPMD): Sample individual sampling params: n={individual_sampling_params_list[0].n}, max_tokens={individual_sampling_params_list[0].max_tokens}")
+        else:
+            # Use single sampling params for all prompts (original behavior)
+            with self.update_sampling_params(**kwargs), self.timer() as t:
+                outputs = self.inference_engine.generate(
+                    prompts=vllm_inputs,  # because we have already convert it to prompt token id
+                    sampling_params=self.sampling_params,
+                    lora_request=lora_requests,
+                    use_tqdm=False,
+                )
 
-            # TODO(sgm): disable logprob when recompute_log_prob is enable
-            # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
+        # TODO(sgm): disable logprob when recompute_log_prob is enable
+        # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
 
-            response = []
-            rollout_log_probs = []
-            for output in outputs:
-                for sample_id in range(len(output.outputs)):
-                    response_ids = output.outputs[sample_id].token_ids
-                    response.append(response_ids)
-                    curr_log_prob = []
-                    for i, logprob in enumerate(output.outputs[sample_id].logprobs):
-                        curr_log_prob.append(logprob[response_ids[i]].logprob)
-                    rollout_log_probs.append(curr_log_prob)
+        response = []
+        rollout_log_probs = []
+        for output in outputs:
+            for sample_id in range(len(output.outputs)):
+                response_ids = output.outputs[sample_id].token_ids
+                response.append(response_ids)
+                curr_log_prob = []
+                for i, logprob in enumerate(output.outputs[sample_id].logprobs):
+                    curr_log_prob.append(logprob[response_ids[i]].logprob)
+                rollout_log_probs.append(curr_log_prob)
 
-            response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
-            rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
-            rollout_log_probs = rollout_log_probs.to(torch.float32)
+        response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
+        rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
+        rollout_log_probs = rollout_log_probs.to(torch.float32)
 
-            if self.sampling_params.n > 1 and do_sample:
-                idx = _repeat_interleave(idx, self.sampling_params.n)
-                attention_mask = _repeat_interleave(attention_mask, self.sampling_params.n)
-                position_ids = _repeat_interleave(position_ids, self.sampling_params.n)
-                batch_size = batch_size * self.sampling_params.n
-                # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
-                if "tools_kwargs" in non_tensor_batch.keys():
-                    non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], self.sampling_params.n)
+        print(f"vLLM rollout (SPMD): After generation - idx.shape={idx.shape}, response.shape={response.shape}")
+        print(f"vLLM rollout (SPMD): batch_size={batch_size}, len(outputs)={len(outputs)}")
+        print(f"vLLM rollout (SPMD): total responses collected={len(response)}")
+        if individual_sampling_params is not None:
+            print(f"vLLM rollout (SPMD): individual_sampling_params n values: {[sp.n for sp in individual_sampling_params_list]}")
 
-            seq = torch.cat([idx, response], dim=-1)
+        # Handle n > 1 case (multiple samples per prompt)
+        if individual_sampling_params is not None:
+            # When using individual sampling params, check if response tensor has more rows than idx
+            # This happens when the sampling params have n > 1
+            if response.shape[0] > idx.shape[0]:
+                expansion_factor = response.shape[0] // idx.shape[0]
+                print(f"vLLM rollout (SPMD): Detected expansion factor={expansion_factor} for individual_sampling_params")
+                if response.shape[0] % idx.shape[0] == 0:  # Ensure it's a clean multiple
+                    idx = _repeat_interleave(idx, expansion_factor)
+                    attention_mask = _repeat_interleave(attention_mask, expansion_factor)
+                    position_ids = _repeat_interleave(position_ids, expansion_factor)
+                    batch_size = batch_size * expansion_factor
+                    if "tools_kwargs" in non_tensor_batch.keys():
+                        non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], expansion_factor)
+                else:
+                    raise ValueError(f"Response shape {response.shape[0]} is not a clean multiple of idx shape {idx.shape[0]}")
+            effective_n = 1  # We've already handled expansion above
+        else:
+            # Use the n value from kwargs instead of self.sampling_params 
+            # because self.sampling_params has reverted after context manager exit
+            effective_n = kwargs.get('n', 1)
+            
+        print(f"vLLM rollout (SPMD): effective_n={effective_n}, do_sample={do_sample}")
+            
+        if effective_n > 1 and do_sample:
+            idx = _repeat_interleave(idx, effective_n)
+            attention_mask = _repeat_interleave(attention_mask, effective_n)
+            position_ids = _repeat_interleave(position_ids, effective_n)
+            batch_size = batch_size * effective_n
+            # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
+            if "tools_kwargs" in non_tensor_batch.keys():
+                non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], effective_n)
+
+        print(f"vLLM rollout (SPMD): After expansion - idx.shape={idx.shape}, response.shape={response.shape}")
+        print(f"vLLM rollout (SPMD): About to concatenate tensors")
+        seq = torch.cat([idx, response], dim=-1)
 
         response_length = response.size(1)
         delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
