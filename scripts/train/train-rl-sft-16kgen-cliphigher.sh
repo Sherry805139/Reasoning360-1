@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sft-16kgen-rl-cliphigher-qwen32b-amthink
+#SBATCH --job-name=16node-32kgen-aggGradClipping-sft-cliphigher-qwen32b-amthink
 #SBATCH --partition=main
 #SBATCH --account=iq
 #SBATCH --nodes=16
@@ -15,8 +15,8 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="347376-sft-16kgen-rl-cliphigher-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.180:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+RESUME_CKPT_DIR_NAME="347414-sft-32kgen-rl-cliphigher-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+export STEM_LLM_JUDGE_URL="http://10.24.1.216:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -139,7 +139,7 @@ BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/ch
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
-WANDB_EXPERIMENT_NAME=347376-sft-16kgen-rl-cliphigher-qwen32b-amthink # ${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME} #-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -185,9 +185,10 @@ kl_loss_coef=0.0
 
 clip_ratio_low=0.2
 clip_ratio_high=0.28
+grad_clip=0.1
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -213,8 +214,8 @@ gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up modelforward, but note memory overflow
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up model forward & backward but note memory overflow
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up modelforward, but note memory overflow
 offload=True
 
 n_resp_per_prompt_val=1
@@ -259,7 +260,7 @@ val_before_train=True
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.grad_clip=1.0 \
+    actor_rollout_ref.actor.grad_clip=${grad_clip} \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
@@ -300,7 +301,7 @@ val_before_train=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=True \
+    trainer.val_before_train=${val_before_train} \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
@@ -308,6 +309,4 @@ val_before_train=True
     trainer.test_freq=${test_freq} \
     trainer.total_epochs=${total_epochs} \
     +trainer.val_generations_to_log_to_wandb=30 \
-    trainer.max_actor_ckpt_to_keep=${max_ckpt_to_keep} \
-    trainer.max_critic_ckpt_to_keep=${max_ckpt_to_keep}
     trainer.resume_mode=auto
