@@ -236,15 +236,17 @@ class RayDAPOTrainer(RayPPOTrainer):
                 f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
+                metrics = {}
+
                 if self.config.trainer.vary_length:
                     # Get individual response lengths for each prompt in the batch
                     batch_prompt_ids = batch_dict["prompt_id"]
                     max_response_length = self.config.data.get("max_response_length", 1024*28)
                     
                     # Calculate individual generation lengths for each prompt
-                    individual_gen_lengths = []
-                    individual_pass_rates = []
-                    individual_avg_lengths = []
+                    per_prompt_max_length = []
+                    per_prompt_pass_rate = []
+                    per_prompt_pass_avg_length = []
                     
                     for prompt_id in batch_prompt_ids:
                         row = self.train_dataset.dataframe[self.train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
@@ -256,24 +258,24 @@ class RayDAPOTrainer(RayPPOTrainer):
                         individual_gen_length = prompt_avg_length + (max_response_length - prompt_avg_length) * (1 - prompt_pass_rate)
                         individual_gen_length = min(individual_gen_length, max_response_length)  # Cap at max response length
                         
-                        individual_gen_lengths.append(int(individual_gen_length))
-                        individual_pass_rates.append(prompt_pass_rate)
-                        individual_avg_lengths.append(prompt_avg_length)
+                        per_prompt_max_length.append(int(individual_gen_length))
+                        per_prompt_pass_rate.append(prompt_pass_rate)
+                        per_prompt_pass_avg_length.append(prompt_avg_length)
                     
                     # Log statistics
-                    avg_on_policy_pass_rate = np.mean(individual_pass_rates)
-                    avg_on_policy_avg_length = np.mean(individual_avg_lengths)
-                    avg_batch_gen_length = np.mean(individual_gen_lengths)
+                    avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
+                    avg_prompt_pass_avg_length = np.mean(per_prompt_pass_avg_length)
+                    avg_batch_max_length = np.mean(per_prompt_max_length)
                     
-                    print(f"Average previous on-policy pass rate for this batch: {avg_on_policy_pass_rate:.4f}")
-                    print(f"Average previous on-policy avg length for this batch: {avg_on_policy_avg_length:.1f}")
-                    print(f"Average batch gen length: {avg_batch_gen_length:.1f} (range: {min(individual_gen_lengths)}-{max(individual_gen_lengths)}, max allowed: {max_response_length})")
+                    print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
+                    print(f"Average previous on-policy avg length for this batch: {avg_prompt_pass_avg_length:.1f}")
+                    print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_max_length)}-{max(per_prompt_max_length)}, max allowed: {max_response_length})")
                 
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
                 # len(self.train_dataloader) * #GPUs = len(self.train_dataset)
                 # (bsz, seq_len)
-                metrics = {}
+                
 
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 num_gen_batches += 1
@@ -292,9 +294,9 @@ class RayDAPOTrainer(RayPPOTrainer):
                 )
                 
                 if self.config.trainer.vary_length:
-                    # Set the individual generation lengths in meta_info
-                    gen_batch.meta_info["response_length"] = individual_gen_lengths
-                    print(f"Set gen_batch.meta_info['response_length'] to list of {len(individual_gen_lengths)} lengths (avg: {avg_batch_gen_length:.1f})")
+                    # Set the individual generation lengths in non_tensor_batch
+                    gen_batch.non_tensor_batch["per_prompt_max_length"] = np.array(per_prompt_max_length, dtype=object)
+                    print(f"Set gen_batch.non_tensor_batch['per_prompt_max_length'] to list of {len(per_prompt_max_length)} lengths (avg: {avg_batch_max_length:.1f})")
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
