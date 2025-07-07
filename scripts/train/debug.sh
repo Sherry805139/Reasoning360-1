@@ -93,8 +93,8 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}', '${leetcode_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}']"
+train_files="['${livecodebench_train_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${livecodebench_test_path}']"
 
 
 # =================== Model ===================
@@ -105,9 +105,14 @@ CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 WANDB_PROJECT=Difficulty-Aware-RL
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}_debug
 
+# Set default local directory for checkpoints
+DEFAULT_LOCAL_DIR="checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
+
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
-    WANDB_EXPERIMENT_NAME="$RESUME_CKPT_DIR_NAME"
+    # Extract just the experiment name from the checkpoint path for wandb
+    WANDB_EXPERIMENT_NAME=$(basename "$RESUME_CKPT_DIR_NAME")
+    DEFAULT_LOCAL_DIR="$RESUME_CKPT_DIR_NAME"
 fi
 
 
@@ -260,9 +265,10 @@ offload=True
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=50 \
+    trainer.save_freq=10 \
     trainer.test_freq=2 \
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
+    trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.vary_length=True 
