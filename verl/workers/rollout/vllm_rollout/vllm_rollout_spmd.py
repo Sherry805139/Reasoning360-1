@@ -397,9 +397,9 @@ class vLLMRollout(BaseRollout):
         rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
         rollout_log_probs = rollout_log_probs.to(torch.float32)
 
-        print(f"vLLM rollout (SPMD): After generation - idx.shape={idx.shape}, response.shape={response.shape}")
-        print(f"vLLM rollout (SPMD): batch_size={batch_size}, len(outputs)={len(outputs)}")
-        print(f"vLLM rollout (SPMD): total responses collected={len(response)}")
+        # print(f"vLLM rollout (SPMD): After generation - idx.shape={idx.shape}, response.shape={response.shape}")
+        # print(f"vLLM rollout (SPMD): batch_size={batch_size}, len(outputs)={len(outputs)}")
+        # print(f"vLLM rollout (SPMD): total responses collected={len(response)}")
         if individual_sampling_params is not None:
             print(f"vLLM rollout (SPMD): individual_sampling_params n values: {[sp.n for sp in individual_sampling_params_list]}")
 
@@ -439,8 +439,8 @@ class vLLMRollout(BaseRollout):
             if "tools_kwargs" in non_tensor_batch.keys():
                 non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], effective_n)
 
-        print(f"vLLM rollout (SPMD): After expansion - idx.shape={idx.shape}, response.shape={response.shape}")
-        print(f"vLLM rollout (SPMD): About to concatenate tensors")
+        # print(f"vLLM rollout (SPMD): After expansion - idx.shape={idx.shape}, response.shape={response.shape}")
+        # print(f"vLLM rollout (SPMD): About to concatenate tensors")
         seq = torch.cat([idx, response], dim=-1)
 
         response_length = response.size(1)

@@ -78,8 +78,24 @@ class RayDAPOTrainer(RayPPOTrainer):
                 self.train_dataset.dataframe["on_policy_avg_length"] = self.config.data.get("max_response_length", 1024*28) / 2 
                 print(f"Initialized on_policy_avg_length with default value of {self.config.data.get('max_response_length', 1024*28) / 2} tokens")
 
-            # Sort by pass rate (fixed: was using undefined filtered_df)
-            filtered_df = self.train_dataset.dataframe.sort_values(by="on_policy_pass_rate", ascending=False).reset_index(drop=True)
+            # Compute per_prompt_max_length for each prompt based on pass rate and avg length
+            max_response_length = self.config.data.get("max_response_length", 1024*28)
+            per_prompt_max_length = []
+            
+            for _, row in self.train_dataset.dataframe.iterrows():
+                prompt_pass_rate = row['on_policy_pass_rate']
+                prompt_avg_length = row['on_policy_avg_length']
+                
+                # Calculate individual generation length based on pass rate and average length
+                # High pass rate -> use avg length, low pass rate -> use larger length up to max
+                individual_gen_length = prompt_avg_length + (max_response_length - prompt_avg_length) * (1 - prompt_pass_rate)
+                individual_gen_length = min(individual_gen_length, max_response_length)  # Cap at max response length
+                per_prompt_max_length.append(int(individual_gen_length))
+            
+            self.train_dataset.dataframe["per_prompt_max_length"] = per_prompt_max_length
+
+            # Sort by per_prompt_max_length for more efficient rollout batching
+            filtered_df = self.train_dataset.dataframe.sort_values(by="per_prompt_max_length", ascending=False).reset_index(drop=True)
             
             train_dataset_copy = deepcopy(self.train_dataset)
             train_dataset_copy.dataframe = filtered_df
@@ -138,8 +154,23 @@ class RayDAPOTrainer(RayPPOTrainer):
         # Create filtered dataset
         filtered_df = original_df.loc[kept_indices].reset_index(drop=True)
         
-        # Sort by score from high to low
-        filtered_df = filtered_df.sort_values(by="on_policy_pass_rate", ascending=False).reset_index(drop=True)
+        # Recompute per_prompt_max_length for filtered data
+        max_response_length = self.config.data.get("max_response_length", 1024*28)
+        per_prompt_max_length = []
+        
+        for _, row in filtered_df.iterrows():
+            prompt_pass_rate = row['on_policy_pass_rate']
+            prompt_avg_length = row['on_policy_avg_length']
+            
+            # Calculate individual generation length based on pass rate and average length
+            individual_gen_length = prompt_avg_length + (max_response_length - prompt_avg_length) * (1 - prompt_pass_rate)
+            individual_gen_length = min(individual_gen_length, max_response_length)
+            per_prompt_max_length.append(int(individual_gen_length))
+        
+        filtered_df["per_prompt_max_length"] = per_prompt_max_length
+        
+        # Sort by per_prompt_max_length for more efficient rollout batching
+        filtered_df = filtered_df.sort_values(by="per_prompt_max_length", ascending=False).reset_index(drop=True)
         
         # Create filtered dataset copy
         train_dataset_copy = deepcopy(self.train_dataset)
@@ -174,6 +205,13 @@ class RayDAPOTrainer(RayPPOTrainer):
         print(f"Filtered dataset size: {len(filtered_df)}")
         print(f"Total discarded data points: {discarded}")
         print(f"Total percentage discarded: {pct:.2f}%")
+        
+        # Log per_prompt_max_length statistics
+        avg_max_length = np.mean(per_prompt_max_length)
+        print(f"Per-prompt max length statistics:")
+        print(f"  - Average: {avg_max_length:.1f}")
+        print(f"  - Range: {min(per_prompt_max_length)}-{max(per_prompt_max_length)}")
+        print(f"  - Max allowed: {max_response_length}")
 
         print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
 
@@ -224,6 +262,7 @@ class RayDAPOTrainer(RayPPOTrainer):
         batch = None
         num_prompt_in_batch = 0
         num_gen_batches = 0
+        
         for epoch in range(self.config.trainer.total_epochs):
             if self.config.trainer.vary_length:
                 train_dataset = self._create_priority_dataloader(epoch_idx=epoch)
@@ -239,37 +278,22 @@ class RayDAPOTrainer(RayPPOTrainer):
                 metrics = {}
 
                 if self.config.trainer.vary_length:
-                    # Get individual response lengths for each prompt in the batch
+                    # Use pre-computed per_prompt_max_length from the dataframe
                     batch_prompt_ids = batch_dict["prompt_id"]
-                    max_response_length = self.config.data.get("max_response_length", 1024*28)
-                    
-                    # Calculate individual generation lengths for each prompt
                     per_prompt_max_length = []
                     per_prompt_pass_rate = []
-                    per_prompt_pass_avg_length = []
                     
                     for prompt_id in batch_prompt_ids:
-                        row = self.train_dataset.dataframe[self.train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
-                        prompt_pass_rate = row['on_policy_pass_rate']
-                        prompt_avg_length = row['on_policy_avg_length']
-                        
-                        # Calculate individual generation length based on pass rate and average length
-                        # High pass rate -> use avg length, low pass rate -> use larger length up to max
-                        individual_gen_length = prompt_avg_length + (max_response_length - prompt_avg_length) * (1 - prompt_pass_rate)
-                        individual_gen_length = min(individual_gen_length, max_response_length)  # Cap at max response length
-                        
-                        per_prompt_max_length.append(int(individual_gen_length))
-                        per_prompt_pass_rate.append(prompt_pass_rate)
-                        per_prompt_pass_avg_length.append(prompt_avg_length)
+                        row = train_dataset.dataframe[train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
+                        per_prompt_max_length.append(int(row['per_prompt_max_length']))
+                        per_prompt_pass_rate.append(row['on_policy_pass_rate'])
                     
                     # Log statistics
                     avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
-                    avg_prompt_pass_avg_length = np.mean(per_prompt_pass_avg_length)
                     avg_batch_max_length = np.mean(per_prompt_max_length)
                     
                     print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
-                    print(f"Average previous on-policy avg length for this batch: {avg_prompt_pass_avg_length:.1f}")
-                    print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_max_length)}-{max(per_prompt_max_length)}, max allowed: {max_response_length})")
+                    print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_max_length)}-{max(per_prompt_max_length)})")
                 
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
@@ -595,6 +619,28 @@ class RayDAPOTrainer(RayPPOTrainer):
                 metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))
                 timing_raw = defaultdict(float)  # clear timing
 
+                # Add per-prompt metrics for the current batch only
+                if hasattr(train_dataset, 'dataframe') and batch is not None:
+                    # Get unique prompt_ids from the current batch
+                    batch_prompt_ids = batch.non_tensor_batch["prompt_id"]
+                    unique_prompt_ids = np.unique(batch_prompt_ids)
+                    
+                    # Filter dataframe to only include prompts from current batch
+                    batch_df = train_dataset.dataframe[train_dataset.dataframe['prompt_id'].isin(unique_prompt_ids)]
+                    
+                    if len(batch_df) > 0:
+                        metrics.update({
+                            "train/per_prompt_pass_rate_avg": batch_df["on_policy_pass_rate"].mean(),
+                            "train/per_prompt_pass_rate_std": batch_df["on_policy_pass_rate"].std(),
+                            "train/per_prompt_pass_rate_min": batch_df["on_policy_pass_rate"].min(),
+                            "train/per_prompt_pass_rate_max": batch_df["on_policy_pass_rate"].max(),
+                            "train/per_prompt_max_length_avg": batch_df["per_prompt_max_length"].mean(),
+                            "train/per_prompt_max_length_std": batch_df["per_prompt_max_length"].std(),
+                            "train/per_prompt_max_length_min": batch_df["per_prompt_max_length"].min(),
+                            "train/per_prompt_max_length_max": batch_df["per_prompt_max_length"].max(),
+                            "train/num_unique_prompts": len(unique_prompt_ids)
+                        })
+
                 metrics["train/num_gen_batches"] = num_gen_batches
                 metrics['train/num_prompts'] = len(train_dataset.dataframe)
                 metrics['train/perct_dropped_prompts'] = 100 * ( (len(self.train_dataset.dataframe) - len(train_dataset.dataframe)) / len(self.train_dataset.dataframe))
@@ -615,3 +661,91 @@ class RayDAPOTrainer(RayPPOTrainer):
 
                 progress_bar.update(1)
                 self.global_steps += 1
+
+    def _save_dataset_state(self, local_global_step_folder):
+        """
+        Save the current dataset state including updated pass rates and lengths.
+        This is crucial for resuming training with vary_length feature.
+        """
+        if not self.config.trainer.get('vary_length', False):
+            return
+            
+        dataset_state_path = os.path.join(local_global_step_folder, 'dataset_state.pt')
+        
+        # Save the current dataset state
+        dataset_state = {
+            'dataframe': self.train_dataset.dataframe.copy(),
+            'n_drop_easy': getattr(self, 'n_drop_easy', 0),
+            'n_drop_hard': getattr(self, 'n_drop_hard', 0),
+        }
+        
+        torch.save(dataset_state, dataset_state_path)
+        print(f"Saved dataset state to {dataset_state_path}")
+        print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
+        print(f"  - Pass rate range: {self.train_dataset.dataframe['on_policy_pass_rate'].min():.3f} - {self.train_dataset.dataframe['on_policy_pass_rate'].max():.3f}")
+
+    def _load_dataset_state(self, global_step_folder):
+        """
+        Load the dataset state including updated pass rates and lengths.
+        This restores the learned statistics from previous training.
+        """
+        if not self.config.trainer.get('vary_length', False):
+            return
+            
+        dataset_state_path = os.path.join(global_step_folder, 'dataset_state.pt')
+        
+        if os.path.exists(dataset_state_path):
+            print(f"Loading dataset state from {dataset_state_path}")
+            dataset_state = torch.load(dataset_state_path, weights_only=False)
+            
+            # Restore dataset with updated pass rates and lengths
+            self.train_dataset.dataframe = dataset_state['dataframe']
+            self.n_drop_easy = dataset_state.get('n_drop_easy', 0) 
+            self.n_drop_hard = dataset_state.get('n_drop_hard', 0)
+            
+            print(f"Restored dataset state:")
+            print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
+            print(f"  - Pass rate range: {self.train_dataset.dataframe['on_policy_pass_rate'].min():.3f} - {self.train_dataset.dataframe['on_policy_pass_rate'].max():.3f}")
+            if 'on_policy_avg_length' in self.train_dataset.dataframe.columns:
+                print(f"  - Avg length range: {self.train_dataset.dataframe['on_policy_avg_length'].min():.1f} - {self.train_dataset.dataframe['on_policy_avg_length'].max():.1f}")
+        else:
+            print(f"No dataset state found at {dataset_state_path}, starting with original dataset")
+            self.n_drop_easy = 0
+            self.n_drop_hard = 0
+
+    def _save_checkpoint(self):
+        """
+        Override to include dataset state saving for vary_length feature.
+        """
+        # Call parent method to save models and dataloader
+        super()._save_checkpoint()
+        
+        # Save additional dataset state for vary_length
+        local_global_step_folder = os.path.join(self.config.trainer.default_local_dir, f"global_step_{self.global_steps}")
+        self._save_dataset_state(local_global_step_folder)
+
+    def _load_checkpoint(self):
+        """
+        Override to include dataset state loading for vary_length feature.
+        """
+        # Store original global_steps to detect if we loaded from checkpoint
+        original_global_steps = self.global_steps
+        
+        # Call parent method to load models and dataloader
+        result = super()._load_checkpoint()
+        
+        # If global_steps changed, we loaded from checkpoint
+        if self.global_steps > original_global_steps:
+            checkpoint_folder = self.config.trainer.default_local_dir
+            if not os.path.isabs(checkpoint_folder):
+                working_dir = os.getcwd()
+                checkpoint_folder = os.path.join(working_dir, checkpoint_folder)
+            
+            # Find the same checkpoint folder that was loaded
+            from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
+            global_step_folder = find_latest_ckpt_path(checkpoint_folder)
+            
+            if global_step_folder is not None:
+                self._load_dataset_state(global_step_folder)
+        
+        return result
