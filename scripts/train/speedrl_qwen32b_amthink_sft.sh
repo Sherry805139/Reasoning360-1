@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=speedrl-64node-32kgen-sft-cliphigh-qwen32b-amthink
+#SBATCH --job-name=speedrl-16node-32kgen-sft-cliphigh-qwen32b-amthink
 #SBATCH --account=iq         # Your research account/QoS Account
 #SBATCH --partition=main
-#SBATCH --nodes=64
-#SBATCH --ntasks=64
+#SBATCH --nodes=16
+#SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -16,7 +16,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.180:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="http://10.24.1.216:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -157,6 +157,7 @@ kl_loss_coef=0.0
 
 clip_ratio_low=0.2
 clip_ratio_high=0.28
+grad_clip=0.1
 
 max_prompt_length=$((1024 * 4))
 max_response_length=$((1024 * 32))
@@ -237,7 +238,7 @@ val_before_train=True
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.grad_clip=1.0 \
+    actor_rollout_ref.actor.grad_clip=${grad_clip} \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
@@ -287,8 +288,6 @@ val_before_train=True
     trainer.test_freq=${test_freq} \
     trainer.total_epochs=${total_epochs} \
     +trainer.val_generations_to_log_to_wandb=30 \
-    trainer.max_actor_ckpt_to_keep=${max_ckpt_to_keep} \
-    trainer.max_critic_ckpt_to_keep=${max_ckpt_to_keep} \
     trainer.save_metric_path=$(date +%Y%m%d_%H%M%S) \
     trainer.resume_mode=auto \
     curriculum.enable=${enable_curriculum}
