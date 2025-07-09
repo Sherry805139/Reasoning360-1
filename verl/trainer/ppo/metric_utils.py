@@ -122,22 +122,22 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
     response_length = response_info["response_length"]
 
     # Handle individual length control
-    if "per_prompt_max_length" in batch.non_tensor_batch:
-        # Individual length control: each sample has its own target response length
-        per_prompt_max_length = batch.non_tensor_batch["per_prompt_max_length"]
-        if isinstance(per_prompt_max_length, (list, np.ndarray)):
-            per_prompt_max_length = torch.tensor([float(x) for x in per_prompt_max_length], dtype=torch.float32)
-        
-        # For metrics display, we can still track the max for reference
-        max_response_length = torch.max(per_prompt_max_length).item()
+    if "per_prompt_length_budget" in batch.non_tensor_batch:
+        # For individual response lengths (vary_length mode)
+        per_prompt_length_budget = batch.non_tensor_batch["per_prompt_length_budget"]
+        if isinstance(per_prompt_length_budget, (list, np.ndarray)):
+            per_prompt_length_budget = torch.tensor([float(x) for x in per_prompt_length_budget], dtype=torch.float32)
+
+        # Use the maximum across all prompts for reference
+        max_response_length = torch.max(per_prompt_length_budget).item()
     elif batch.meta_info.get("target_max_response_length", None) is not None:
         # Traditional approach: single target length for all samples
         max_response_length = batch.meta_info["target_max_response_length"]
-        per_prompt_max_length = None
+        per_prompt_length_budget = None
     else:
         # No target length specified, use the maximum actual response length
         max_response_length = torch.max(response_length).item()
-        per_prompt_max_length = None
+        per_prompt_length_budget = None
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -156,22 +156,22 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
         data_source_scores[data_source].append(sequence_score[i].item())
 
     # Calculate clip ratio based on individual vs batch-level target lengths
-    if per_prompt_max_length is not None:
+    if per_prompt_length_budget is not None:
         # Individual length control: compare each response to its own target length
-        # Ensure per_prompt_max_length is on the same device as response_length
-        per_prompt_max_length = per_prompt_max_length.to(response_length.device)
-        # Compare each response_length[i] to per_prompt_max_length[i]
+        # Ensure per_prompt_length_budget is on the same device as response_length
+        per_prompt_length_budget = per_prompt_length_budget.to(response_length.device)
+        # Compare each response_length[i] to per_prompt_length_budget[i]
         # NOTE: Fixed clip ratio calculation - should measure if response hit the generation limit
         # not if meaningful tokens exactly match target length
         
         # Debug: print some statistics
         print(f"[DEBUG] response_length stats: min={torch.min(response_length).item():.1f}, "
               f"max={torch.max(response_length).item():.1f}, mean={torch.mean(response_length).item():.1f}")
-        print(f"[DEBUG] per_prompt_max_length stats: min={torch.min(per_prompt_max_length).item():.1f}, "
-              f"max={torch.max(per_prompt_max_length).item():.1f}, mean={torch.mean(per_prompt_max_length).item():.1f}")
-        print(f"[DEBUG] Number of responses >= target: {torch.sum(torch.ge(response_length, per_prompt_max_length)).item()}/{len(response_length)}")
+        print(f"[DEBUG] per_prompt_length_budget stats: min={torch.min(per_prompt_length_budget).item():.1f}, "
+              f"max={torch.max(per_prompt_length_budget).item():.1f}, mean={torch.mean(per_prompt_length_budget).item():.1f}")
+        print(f"[DEBUG] Number of responses >= target: {torch.sum(torch.ge(response_length, per_prompt_length_budget)).item()}/{len(response_length)}")
         
-        clip_ratio = torch.mean(torch.ge(response_length, per_prompt_max_length).float()).item()
+        clip_ratio = torch.mean(torch.ge(response_length, per_prompt_length_budget).float()).item()
     else:
         # Traditional approach: compare all samples to the same target length
         # For traditional approach, if max_response_length is from target, use >= comparison
@@ -230,11 +230,11 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
         lengths_tensor = torch.tensor(lengths, device=response_length.device)
         
         # Calculate clip ratio for this data source
-        if per_prompt_max_length is not None:
+        if per_prompt_length_budget is not None:
             # Get target lengths for this data source
             data_source_indices = [i for i, ds in enumerate(batch.non_tensor_batch['data_source']) if ds == data_source]
             if len(data_source_indices) > 0:
-                data_source_targets = per_prompt_max_length[data_source_indices]
+                data_source_targets = per_prompt_length_budget[data_source_indices]
                 # Ensure both tensors are on the same device and have the same shape
                 data_source_targets = data_source_targets.to(response_length.device)
                 # NOTE: Fixed clip ratio calculation - compare each response to its own target length

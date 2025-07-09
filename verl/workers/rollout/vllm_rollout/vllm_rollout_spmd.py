@@ -190,7 +190,12 @@ class vLLMRollout(BaseRollout):
             if hasattr(SamplingParams(), str(k)):
                 kwargs[k] = config.get(k)
 
-        print(f"kwargs: {kwargs}")
+        print(f"kwargs by 360 (SPMD): {kwargs}")
+
+        # Preserve the n value for deterministic expansion (needed for both paths)
+        n_samples = kwargs.get('n', 1)
+
+        # users can customize different sampling_params at different run
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
@@ -297,12 +302,15 @@ class vLLMRollout(BaseRollout):
         # NOTE: added by Reasoning360
         if "num_samples" in prompts.meta_info:
             kwargs["n"] = prompts.meta_info["num_samples"]
-
+            
+        # Preserve the n value for deterministic expansion (needed for both paths)
+        n_samples = kwargs.get('n', 1)
+            
         # Check for individual response lengths in non_tensor_batch
         individual_sampling_params = None
-        per_prompt_max_length = None
-        if "per_prompt_max_length" in prompts.non_tensor_batch:
-            response_length = prompts.non_tensor_batch["per_prompt_max_length"]
+        per_prompt_length_budget = None
+        if "per_prompt_length_budget" in prompts.non_tensor_batch:
+            response_length = prompts.non_tensor_batch["per_prompt_length_budget"]
             
             # Convert to list if it's a numpy array
             if isinstance(response_length, np.ndarray):
@@ -317,7 +325,7 @@ class vLLMRollout(BaseRollout):
             
             # Set flag to use individual context manager approach
             individual_sampling_params = True
-            per_prompt_max_length = response_length
+            per_prompt_length_budget = response_length
             print(f"vLLM rollout (SPMD): Using individual response lengths (range: {min(response_length)}-{max(response_length)})")
         
         # Check for single response_length override in meta_info (backward compatibility)
@@ -327,8 +335,6 @@ class vLLMRollout(BaseRollout):
             kwargs["max_tokens"] = response_length
             print(f"vLLM rollout (SPMD): Overriding max_tokens to {response_length}")
         
-        print(f"kwargs by 360 (SPMD): {kwargs}")
-
         # users can customize different sampling_params at different run
         if individual_sampling_params is not None:
             # Use context manager approach to create individual sampling params while maintaining batch efficiency
@@ -366,9 +372,6 @@ class vLLMRollout(BaseRollout):
                     lora_request=lora_requests,
                     use_tqdm=False,
                 )
-            print(f"individual_sampling_params: Using context manager approach with batch inference")
-            print(f"vLLM rollout (SPMD): Created {len(individual_sampling_params_list)} individual sampling params")
-            print(f"vLLM rollout (SPMD): Sample individual sampling params: n={individual_sampling_params_list[0].n}, max_tokens={individual_sampling_params_list[0].max_tokens}")
         else:
             # Use single sampling params for all prompts (original behavior)
             with self.update_sampling_params(**kwargs), self.timer() as t:
@@ -397,50 +400,42 @@ class vLLMRollout(BaseRollout):
         rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
         rollout_log_probs = rollout_log_probs.to(torch.float32)
 
-        # print(f"vLLM rollout (SPMD): After generation - idx.shape={idx.shape}, response.shape={response.shape}")
-        # print(f"vLLM rollout (SPMD): batch_size={batch_size}, len(outputs)={len(outputs)}")
-        # print(f"vLLM rollout (SPMD): total responses collected={len(response)}")
-        if individual_sampling_params is not None:
-            print(f"vLLM rollout (SPMD): individual_sampling_params n values: {[sp.n for sp in individual_sampling_params_list]}")
-
-        # Handle n > 1 case (multiple samples per prompt)
-        if individual_sampling_params is not None:
-            # When using individual sampling params, check if response tensor has more rows than idx
-            # This happens when the sampling params have n > 1
-            if response.shape[0] > idx.shape[0]:
-                expansion_factor = response.shape[0] // idx.shape[0]
-                print(f"vLLM rollout (SPMD): Detected expansion factor={expansion_factor} for individual_sampling_params")
-                if response.shape[0] % idx.shape[0] == 0:  # Ensure it's a clean multiple
-                    idx = _repeat_interleave(idx, expansion_factor)
-                    attention_mask = _repeat_interleave(attention_mask, expansion_factor)
-                    position_ids = _repeat_interleave(position_ids, expansion_factor)
-                    batch_size = batch_size * expansion_factor
-                    print(f"vLLM rollout (SPMD): Expanded batch_size from {batch_size // expansion_factor} to {batch_size}")
-                    if "tools_kwargs" in non_tensor_batch.keys():
-                        non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], expansion_factor)
-                else:
-                    raise ValueError(f"Response shape {response.shape[0]} is not a clean multiple of idx shape {idx.shape[0]}")
-            effective_n = 1  # We've already handled expansion above
-        else:
-            # Use the n value from kwargs instead of self.sampling_params 
-            # because self.sampling_params has reverted after context manager exit
-            effective_n = kwargs.get('n', 1)
-            
-        print(f"vLLM rollout (SPMD): effective_n={effective_n}, do_sample={do_sample}")
-            
-        if effective_n > 1 and do_sample:
-            print(f"vLLM rollout (SPMD): Applying effective_n={effective_n} expansion")
-            idx = _repeat_interleave(idx, effective_n)
-            attention_mask = _repeat_interleave(attention_mask, effective_n)
-            position_ids = _repeat_interleave(position_ids, effective_n)
-            batch_size = batch_size * effective_n
-            print(f"vLLM rollout (SPMD): Expanded batch_size to {batch_size}")
+        # Check if vLLM has already expanded the batch due to n > 1
+        response_batch_size = response.size(0)
+        original_batch_size = batch_size
+        
+        # If response tensor is already expanded (response_batch_size > original_batch_size), 
+        # then vLLM has handled the expansion internally
+        vllm_already_expanded = response_batch_size > original_batch_size
+        
+        # Original deterministic approach: utilize sampling params for tensor expansion
+        # n_samples is the same whether we use individual sampling params or not
+        if n_samples > 1 and do_sample and not vllm_already_expanded:
+            # Only expand if vLLM hasn't already done it
+            idx = _repeat_interleave(idx, n_samples)
+            attention_mask = _repeat_interleave(attention_mask, n_samples)
+            position_ids = _repeat_interleave(position_ids, n_samples)
+            batch_size = batch_size * n_samples
             # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
-            if "tools_kwargs" in non_tensor_batch.keys():
-                non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], effective_n)
+            # NOTE: Fix batch size mismatch by expanding ALL non_tensor_batch items
+            expanded_non_tensor_batch = {}
+            for key, val in non_tensor_batch.items():
+                expanded_non_tensor_batch[key] = _repeat_interleave(val, n_samples)
+            non_tensor_batch = expanded_non_tensor_batch
+        elif vllm_already_expanded:
+            # vLLM has already expanded, so we need to expand the prompt tensors to match
+            expansion_factor = response_batch_size // original_batch_size
+            idx = _repeat_interleave(idx, expansion_factor)
+            attention_mask = _repeat_interleave(attention_mask, expansion_factor)
+            position_ids = _repeat_interleave(position_ids, expansion_factor)
+            batch_size = response_batch_size
+            # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
+            # NOTE: Fix batch size mismatch by expanding ALL non_tensor_batch items
+            expanded_non_tensor_batch = {}
+            for key, val in non_tensor_batch.items():
+                expanded_non_tensor_batch[key] = _repeat_interleave(val, expansion_factor)
+            non_tensor_batch = expanded_non_tensor_batch
 
-        # print(f"vLLM rollout (SPMD): After expansion - idx.shape={idx.shape}, response.shape={response.shape}")
-        # print(f"vLLM rollout (SPMD): About to concatenate tensors")
         seq = torch.cat([idx, response], dim=-1)
 
         response_length = response.size(1)
@@ -458,13 +453,6 @@ class vLLMRollout(BaseRollout):
         response_attention_mask = get_response_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
 
-        # NOTE: added by Reasoning360. temporarily disabled to avoid messy logging
-        # tokens_per_second = torch.sum(response_attention_mask).item() / t()
-        # print(
-        #     f'Tokens per second: {tokens_per_second} t/s on device {os.environ["CUDA_VISIBLE_DEVICES"]} on host {os.uname().nodename}',
-        #     flush=True,
-        # )
-
         # all the tp ranks should contain the same data here. data in all ranks are valid
         batch = TensorDict(
             {
@@ -481,30 +469,9 @@ class vLLMRollout(BaseRollout):
         # Prepare meta_info for the returned DataProto
         meta_info = prompts.meta_info.copy()
         
-        # Expand per_prompt_max_length to match final batch size if needed
-        if "per_prompt_max_length" in non_tensor_batch and per_prompt_max_length is not None:
-            original_worker_lengths = len(per_prompt_max_length)
-            final_batch_size = batch_size  # This is the final batch size after all expansions
-            
-            if final_batch_size > original_worker_lengths:
-                # Calculate expansion factor (due to n > 1)
-                expansion_factor = final_batch_size // original_worker_lengths
-                if final_batch_size % original_worker_lengths != 0:
-                    raise ValueError(f"Final batch size {final_batch_size} is not a clean multiple of original worker lengths {original_worker_lengths}")
-                
-                # Expand individual response lengths to match the final batch size
-                expanded_lengths = []
-                for length in per_prompt_max_length:
-                    expanded_lengths.extend([length] * expansion_factor)
-                
-                # Update per_prompt_max_length with expanded lengths for metrics calculation
-                non_tensor_batch["per_prompt_max_length"] = np.array(expanded_lengths, dtype=object)
-                print(f"vLLM rollout (SPMD): Expanded per_prompt_max_length from {original_worker_lengths} to {len(expanded_lengths)} (factor: {expansion_factor})")
-            # If no expansion needed, per_prompt_max_length is already in non_tensor_batch from earlier
-        else:
-            # Set target_max_response_length for backward compatibility (only if we didn't use individual response lengths)
+        # Set target_max_response_length for backward compatibility
+        if per_prompt_length_budget is None:
             meta_info["target_max_response_length"] = self.config.response_length
-            print(f"vLLM rollout (SPMD): Using target_max_response_length = {self.config.response_length}")
 
         # free vllm cache engine
         if (
