@@ -87,6 +87,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                 new_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(new_batch.batch))], dtype=object)
                 new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                 new_batch.meta_info["num_samples"] = 1  # already repeated in the input, so set the number of output samples to 1
+                print(f"{new_batch.meta_info=}")
                 # ===================================
 
                 num_gen_batches += 1
