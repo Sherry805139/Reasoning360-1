@@ -81,6 +81,14 @@ class RayDAPOTrainer(RayPPOTrainer):
                 metrics = {}
 
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
+
+                # ====== Added by Reasoning360 ======
+                # Allow #gpus > train batch size (#generation prompts)
+                new_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(new_batch.batch))], dtype=object)
+                new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                new_batch.meta_info["num_samples"] = 1  # already repeated in the input, so set the number of output samples to 1
+                # ===================================
+
                 num_gen_batches += 1
                 # pop those keys for generation
                 batch_keys_to_pop = ["input_ids", "attention_mask", "position_ids"]
@@ -124,10 +132,12 @@ class RayDAPOTrainer(RayPPOTrainer):
 
                             del gen_baseline_batch, gen_baseline_output
 
-                    new_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(new_batch.batch))], dtype=object)
-                    # repeat to align with repeated responses in rollout
-                    new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                    # (bsz*n, seq_len), interleaved, i.e., [A, B] -> [A, A, A, A, B, B, B, B] for n=4
+                    # ====== Removed by Reasoning360 ======
+                    # new_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(new_batch.batch))], dtype=object)
+                    # # repeat to align with repeated responses in rollout
+                    # new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                    # ===================================
+
                     new_batch = new_batch.union(gen_batch_output)
 
                     new_batch.batch["response_mask"] = compute_response_mask(new_batch)
