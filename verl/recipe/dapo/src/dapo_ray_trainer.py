@@ -76,59 +76,51 @@ class RayDAPOTrainer(RayPPOTrainer):
         failed_mask = original_df["on_policy_pass_rate"] == 0.0
         medium_mask = (original_df["on_policy_pass_rate"] > 0.0) & (original_df["on_policy_pass_rate"] < 1.0)
         
-        # Keep all medium difficulty data
-        kept_indices = []
-        kept_indices.extend(original_df[medium_mask].index.tolist())
+        # Get indices for each category
+        medium_indices = original_df[medium_mask].index.tolist()
+        perfect_indices = original_df[perfect_mask].index.tolist()
+        failed_indices = original_df[failed_mask].index.tolist()
         
-        # Get the number of medium examples to base our ratios on
-        n_medium = len(original_df[medium_mask])
+        # Keep all medium difficulty data
+        kept_indices = set(medium_indices)
+        n_medium = len(medium_indices)
         
         # Limit perfect examples to 1/10 of medium examples
-        perfect_indices = original_df[perfect_mask].index.tolist()
+        self.n_drop_easy = 0
         if perfect_indices:
-            np.random.seed(42 + epoch_idx)  # Ensure reproducibility but vary by epoch
-            n_keep_perfect = min(n_medium // 10, len(perfect_indices))  # At most 1/10 of medium examples
-            n_keep_perfect = max(1, n_keep_perfect) if perfect_indices else 0  # Keep at least 1 if any exist
+            np.random.seed(42 + epoch_idx)
+            n_keep_perfect = max(1, min(n_medium // 10, len(perfect_indices)))
             if n_keep_perfect > 0:
                 kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
-                kept_indices.extend(kept_perfect.tolist())
+                kept_indices.update(kept_perfect)
             self.n_drop_easy = len(perfect_indices) - n_keep_perfect
         
         # Limit failed examples to 1/5 of medium examples
-        failed_indices = original_df[failed_mask].index.tolist()
+        self.n_drop_hard = 0
         if failed_indices:
-            np.random.seed(43 + epoch_idx)  # Different seed for failed examples
-            n_keep_failed = min(n_medium // 5, len(failed_indices))  # At most 1/5 of medium examples
-            n_keep_failed = max(1, n_keep_failed) if failed_indices else 0  # Keep at least 1 if any exist
+            np.random.seed(43 + epoch_idx)
+            n_keep_failed = max(1, min(n_medium // 5, len(failed_indices)))
             if n_keep_failed > 0:
                 kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
-                kept_indices.extend(kept_failed.tolist())
+                kept_indices.update(kept_failed)
             self.n_drop_hard = len(failed_indices) - n_keep_failed
         
         # Create filtered dataset
-        filtered_df = original_df.loc[kept_indices].reset_index(drop=True)
+        filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True)
         
         # Log filtering statistics
-        n_perfect_original = len(perfect_indices)
-        n_failed_original = len(failed_indices) 
-        n_medium_original = len(original_df[medium_mask])
+        n_perfect_kept = len(set(perfect_indices) & kept_indices)
+        n_failed_kept = len(set(failed_indices) & kept_indices)
+        n_medium_kept = len(set(medium_indices) & kept_indices)
         
-        # Count how many of each type were kept (simplified logic)
-        n_perfect_kept = len([i for i in kept_indices if i in perfect_indices])
-        n_failed_kept = len([i for i in kept_indices if i in failed_indices])
-        n_medium_kept = n_medium_original  # All medium examples are kept
-        
-        discarded = len(original_df) - len(filtered_df)
-        pct = 100 * discarded / len(original_df)
-
         print(f"Dataset filtering statistics for epoch {epoch_idx}:")
         print(f"Original dataset size: {len(original_df)}")
-        print(f"  - Perfect examples (pass_rate=1.0): {n_perfect_original} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,n_perfect_original)*100:.1f}%)")
-        print(f"  - Failed examples (pass_rate=0.0): {n_failed_original} -> {n_failed_kept} kept ({n_failed_kept/max(1,n_failed_original)*100:.1f}%)")  
-        print(f"  - Medium examples (0<pass_rate<1): {n_medium_original} -> {n_medium_kept} kept (100.0%)")
+        print(f"  - Perfect examples (pass_rate=1.0): {len(perfect_indices)} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,len(perfect_indices))*100:.1f}%)")
+        print(f"  - Failed examples (pass_rate=0.0): {len(failed_indices)} -> {n_failed_kept} kept ({n_failed_kept/max(1,len(failed_indices))*100:.1f}%)")  
+        print(f"  - Medium examples (0<pass_rate<1): {len(medium_indices)} -> {n_medium_kept} kept ({n_medium_kept/max(1,len(medium_indices))*100:.1f}%)")
         print(f"Filtered dataset size: {len(filtered_df)}")
-        print(f"Total discarded data points: {discarded}")
-        print(f"Total percentage discarded: {pct:.2f}%")
+        print(f"Total discarded data points: {len(original_df) - len(filtered_df)}")
+        print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
 
         # Shared logic for computing per_prompt_length_budget and creating dataloader
         max_response_length = self.config.data.get("max_response_length", 1024*28)
@@ -170,15 +162,7 @@ class RayDAPOTrainer(RayPPOTrainer):
             sampler=SequentialSampler(data_source=filtered_df),
         )
         
-        # Log per_prompt_length_budget statistics
-        avg_max_length = np.mean(per_prompt_length_budget)
-        print(f"Per-prompt max length statistics:")
-        print(f"  - Average: {avg_max_length:.1f}")
-        print(f"  - Range: {min(per_prompt_length_budget)}-{max(per_prompt_length_budget)}")
-        print(f"  - Max allowed: {max_response_length}")
-
         print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
-
         assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
         assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=7b-inst-cliphigh-varylength
+#SBATCH --job-name=simple
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -93,15 +93,15 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}', '${livecodebench_train_path}', '${leetcode_train_path}', '${zebra_train_path}']"  
+train_files="['${math_train_path}', '${zebra_train_path}', '${livecodebench_train_path}', '${leetcode_train_path}']"  
 test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}', '${zebralogic_test_path}', '${ordering_puzzle_test_path}']"
 
 
 # =================== Model ===================
-BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-Instruct
+BASE_MODEL=/mnt/sharefs/users/haonan.li/Qwen2.5-7B-instruct-think_pattern_sys_simple
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
-WANDB_PROJECT=Difficulty-Aware-RL
+WANDB_PROJECT=Efficient-CoT
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}
 
 # Set default local directory for checkpoints
@@ -201,7 +201,6 @@ offload=True
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
     data.gen_batch_size=${gen_prompt_bsz} \
-    +data.initial_pass_rate_column=qwen2.5_7b_pass_rate \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
@@ -271,4 +270,4 @@ offload=True
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.vary_length=True
+    +trainer.vary_length=False

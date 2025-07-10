@@ -102,7 +102,7 @@ BASE_MODEL=/mnt/sharefs/users/haonan.li/models/Qwen2.5-7B-instruct-am_think_v1_d
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}_vary_length
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}
 
 # Set default local directory for checkpoints
 DEFAULT_LOCAL_DIR="checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
