@@ -94,6 +94,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                 # pop those keys for generation
                 batch_keys_to_pop = ["input_ids", "attention_mask", "position_ids"]
                 non_tensor_batch_keys_to_pop = ["raw_prompt_ids"]
+                meta_info_keys_to_pop = ["num_samples"]
                 if "multi_modal_data" in new_batch.non_tensor_batch:
                     non_tensor_batch_keys_to_pop.append("multi_modal_data")
                 # if "raw_prompt" in new_batch.non_tensor_batch:  # Commented out by Reasoning360 as it causes mismatch in multi-domain data
@@ -103,7 +104,9 @@ class RayDAPOTrainer(RayPPOTrainer):
                 gen_batch = new_batch.pop(
                     batch_keys=batch_keys_to_pop,
                     non_tensor_batch_keys=non_tensor_batch_keys_to_pop,
+                    meta_info_keys=meta_info_keys_to_pop,
                 )
+                print(f"{gen_batch.meta_info=}")
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
