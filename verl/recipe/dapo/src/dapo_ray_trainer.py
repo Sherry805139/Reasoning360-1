@@ -68,7 +68,7 @@ class RayDAPOTrainer(RayPPOTrainer):
             self.n_drop_easy = 0
             self.n_drop_hard = 0
 
-        # Apply filtering strategy for all epochs
+        
         original_df = self.train_dataset.dataframe.copy()
         
         # Separate data by pass rate
@@ -105,8 +105,11 @@ class RayDAPOTrainer(RayPPOTrainer):
                 kept_indices.update(kept_failed)
             self.n_drop_hard = len(failed_indices) - n_keep_failed
         
-        # Create filtered dataset
-        filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True)
+        dynamic_filtering = self.config.data.get("dynamic_filtering", False)
+        if dynamic_filtering:
+            filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True)
+        else:
+            filtered_df = original_df.copy()
         
         # Log filtering statistics
         n_perfect_kept = len(set(perfect_indices) & kept_indices)
@@ -124,29 +127,30 @@ class RayDAPOTrainer(RayPPOTrainer):
 
         # Shared logic for computing per_prompt_length_budget and creating dataloader
         max_response_length = self.config.data.get("max_response_length", 1024*28)
+        pass_rate_upper_bound = self.config.data.get("pass_rate_upper_bound", 1.0)
         per_prompt_length_budget = []
         
         for _, row in filtered_df.iterrows():
             prompt_pass_rate = row['on_policy_pass_rate']
-            prompt_avg_length = row['on_policy_passed_avg_length']
-            prompt_max_length = row['on_policy_passed_max_length']
+            passed_prompt_avg_length = row['on_policy_passed_avg_length']
+            passed_prompt_max_length = row['on_policy_passed_max_length']
             
             # Calculate new generation length based on pass rate with conditional strategy
-            if prompt_pass_rate >= 0.8:
+            if prompt_pass_rate > pass_rate_upper_bound:
                 # High pass rate: reduce the max length to 80% of previous max length
-                new_max_gen_length = (1.8 - prompt_pass_rate) * prompt_max_length
+                new_length_budget = max(0.8 * passed_prompt_max_length, passed_prompt_avg_length)
             else:
                 # Low pass rate: use scaling approach based on pass rate
-                new_max_gen_length = prompt_max_length + (max_response_length - prompt_max_length) * (1 - prompt_pass_rate)
+                new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
             
-            new_max_gen_length = max(new_max_gen_length, 2000)  # Set minimum to 2000
-            new_max_gen_length = min(new_max_gen_length, max_response_length)  # Cap at max response length
-            per_prompt_length_budget.append(int(new_max_gen_length))
+            new_length_budget = max(new_length_budget, 2000)  # Set minimum to 2000
+            new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
+            per_prompt_length_budget.append(int(new_length_budget))
         
         filtered_df["per_prompt_length_budget"] = per_prompt_length_budget
         
         # Sort by per_prompt_length_budget for more efficient rollout batching
-        filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=False).reset_index(drop=True)
+        filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
         
         # Create filtered dataset copy
         train_dataset_copy = deepcopy(self.train_dataset)
@@ -590,23 +594,19 @@ class RayDAPOTrainer(RayPPOTrainer):
                             "train/per_prompt_pass_rate_std": batch_df["on_policy_pass_rate"].std(),
                             "train/per_prompt_pass_rate_min": batch_df["on_policy_pass_rate"].min(),
                             "train/per_prompt_pass_rate_max": batch_df["on_policy_pass_rate"].max(),
-                            "train/num_unique_prompts": len(unique_prompt_ids)
-                        })
-                        
-                        if self.config.trainer.get('vary_length', False):
-                            metrics.update({
-                                "train/per_prompt_length_budget_avg": batch_df["per_prompt_length_budget"].mean(),
-                                "train/per_prompt_length_budget_std": batch_df["per_prompt_length_budget"].std(),
-                                "train/per_prompt_length_budget_min": batch_df["per_prompt_length_budget"].min(),
-                                "train/per_prompt_length_budget_max": batch_df["per_prompt_length_budget"].max(),
-                                "train/on_policy_passed_max_length_avg": batch_df["on_policy_passed_max_length"].mean(),
-                                "train/on_policy_passed_max_length_std": batch_df["on_policy_passed_max_length"].std(),
-                                "train/on_policy_passed_max_length_min": batch_df["on_policy_passed_max_length"].min(),
-                                "train/on_policy_passed_max_length_max": batch_df["on_policy_passed_max_length"].max(),
-                                "train/on_policy_passed_avg_length_avg": batch_df["on_policy_passed_avg_length"].mean(),
-                                "train/on_policy_passed_avg_length_std": batch_df["on_policy_passed_avg_length"].std(),
-                                "train/on_policy_passed_avg_length_min": batch_df["on_policy_passed_avg_length"].min(),
-                                "train/on_policy_passed_avg_length_max": batch_df["on_policy_passed_avg_length"].max(),
+                            "train/num_unique_prompts": len(unique_prompt_ids),
+                            "train/per_prompt_length_budget_avg": batch_df["per_prompt_length_budget"].mean(),
+                            "train/per_prompt_length_budget_std": batch_df["per_prompt_length_budget"].std(),
+                            "train/per_prompt_length_budget_min": batch_df["per_prompt_length_budget"].min(),
+                            "train/per_prompt_length_budget_max": batch_df["per_prompt_length_budget"].max(),
+                            "train/on_policy_passed_max_length_avg": batch_df["on_policy_passed_max_length"].mean(),
+                            "train/on_policy_passed_max_length_std": batch_df["on_policy_passed_max_length"].std(),
+                            "train/on_policy_passed_max_length_min": batch_df["on_policy_passed_max_length"].min(),
+                            "train/on_policy_passed_max_length_max": batch_df["on_policy_passed_max_length"].max(),
+                            "train/on_policy_passed_avg_length_avg": batch_df["on_policy_passed_avg_length"].mean(),
+                            "train/on_policy_passed_avg_length_std": batch_df["on_policy_passed_avg_length"].std(),
+                            "train/on_policy_passed_avg_length_min": batch_df["on_policy_passed_avg_length"].min(),
+                            "train/on_policy_passed_avg_length_max": batch_df["on_policy_passed_avg_length"].max(),
                             })
 
                 metrics["train/num_gen_batches"] = num_gen_batches

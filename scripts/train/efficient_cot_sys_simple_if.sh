@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sf
+#SBATCH --job-name=sys_simple_if
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -98,11 +98,11 @@ test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_te
 
 
 # =================== Model ===================
-BASE_MODEL=/mnt/sharefs/users/haonan.li/Qwen2.5-7B-instruct-tp_200k_filter_simple_sf
+BASE_MODEL=/mnt/sharefs/users/haonan.li/tp_models/Qwen2.5-7B-instruct-tp_200k_filter_simple_sys_if
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Efficient-CoT
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}_baseline
 
 # Set default local directory for checkpoints
 DEFAULT_LOCAL_DIR="checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"

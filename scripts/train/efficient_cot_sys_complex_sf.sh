@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=simple
+#SBATCH --job-name=sys_complex_sf
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -98,7 +98,7 @@ test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_te
 
 
 # =================== Model ===================
-BASE_MODEL=/mnt/sharefs/users/haonan.li/Qwen2.5-7B-instruct-think_pattern_sys_simple
+BASE_MODEL=/mnt/sharefs/users/haonan.li/tp_models/Qwen2.5-7B-instruct-tp_200k_filter_complex_sys_sf
 CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Efficient-CoT
