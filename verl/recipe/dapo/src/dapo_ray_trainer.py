@@ -594,7 +594,10 @@ class RayDAPOTrainer(RayPPOTrainer):
                             "train/per_prompt_pass_rate_std": batch_df["on_policy_pass_rate"].std(),
                             "train/per_prompt_pass_rate_min": batch_df["on_policy_pass_rate"].min(),
                             "train/per_prompt_pass_rate_max": batch_df["on_policy_pass_rate"].max(),
-                            "train/num_unique_prompts": len(unique_prompt_ids),
+                            "train/num_unique_prompts": len(unique_prompt_ids)
+                            })
+                    if self.config.data.get("vary_length", False):
+                        metrics.update({
                             "train/per_prompt_length_budget_avg": batch_df["per_prompt_length_budget"].mean(),
                             "train/per_prompt_length_budget_std": batch_df["per_prompt_length_budget"].std(),
                             "train/per_prompt_length_budget_min": batch_df["per_prompt_length_budget"].min(),
@@ -606,8 +609,8 @@ class RayDAPOTrainer(RayPPOTrainer):
                             "train/on_policy_passed_avg_length_avg": batch_df["on_policy_passed_avg_length"].mean(),
                             "train/on_policy_passed_avg_length_std": batch_df["on_policy_passed_avg_length"].std(),
                             "train/on_policy_passed_avg_length_min": batch_df["on_policy_passed_avg_length"].min(),
-                            "train/on_policy_passed_avg_length_max": batch_df["on_policy_passed_avg_length"].max(),
-                            })
+                            "train/on_policy_passed_avg_length_max": batch_df["on_policy_passed_avg_length"].max()
+                        })
 
                 metrics["train/num_gen_batches"] = num_gen_batches
                 metrics['train/num_prompts'] = len(train_dataset.dataframe)
