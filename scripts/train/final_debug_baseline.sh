@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=final-baseline
+#SBATCH --job-name=final-debug
 #SBATCH --partition=main
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=96
@@ -47,7 +47,7 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_1k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -93,8 +93,8 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}', '${zebra_train_path}', '${livecodebench_train_path}', '${leetcode_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}']"  
-test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}', '${zebralogic_test_path}', '${ordering_puzzle_test_path}']"
+train_files="['${math_train_path}']"  
+test_files="['${math_test_path}']"
 
 
 # =================== Model ===================
@@ -152,7 +152,7 @@ use_kl_loss=False
 kl_loss_coef=0.0
 
 clip_ratio_low=0.2
-clip_ratio_high=0.28
+clip_ratio_high=0.24
 
 max_prompt_length=$((1024 * 4))
 max_response_length=$((1024 * 28))
@@ -165,10 +165,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
+train_prompt_bsz=128  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
-train_prompt_mini_bsz=32  # model grad update batchsize
+n_resp_per_prompt=8
+train_prompt_mini_bsz=8  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
@@ -178,8 +178,8 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 # Mathematically equivalent
 sp_size=1
 gen_tp=4
-infer_micro_batch_size=256
-train_micro_batch_size=32
+infer_micro_batch_size=64
+train_micro_batch_size=8
 use_dynamic_bsz=False
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
@@ -264,13 +264,13 @@ offload=True
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=10 \
-    trainer.test_freq=10 \
+    trainer.save_freq=5 \
+    trainer.test_freq=5 \
     trainer.total_epochs=10 \
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.vary_length=False \
+    +trainer.enable_budget=False \
     +data.dynamic_filtering=False \
     +data.pass_rate_upper_bound=1.0 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate

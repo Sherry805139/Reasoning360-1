@@ -48,7 +48,7 @@ class RayDAPOTrainer(RayPPOTrainer):
         self.n_drop_easy = 0
         self.n_drop_hard = 0
 
-    def _create_priority_dataloader(self, epoch_idx):
+    def _create_priority_dataloader(self, epoch_idx, dynamic_filtering, enable_budget):
         """
         Create the dataloader every time before the epoch starts.
         """
@@ -61,93 +61,97 @@ class RayDAPOTrainer(RayPPOTrainer):
         if epoch_idx == 0: 
             # Get the initial pass rate column name from config, with default fallback
             initial_pass_rate_column = self.config.data.get("initial_pass_rate_column", "qwen3_30b_pass_rate")
-            self.train_dataset.dataframe["on_policy_pass_rate"] = self.train_dataset.dataframe[initial_pass_rate_column]
+            self.train_dataset.dataframe["prev_pass_rate"] = self.train_dataset.dataframe[initial_pass_rate_column]
             # use half of the max response length as the average length for the first epoch
-            self.train_dataset.dataframe["on_policy_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) / 2 
-            self.train_dataset.dataframe["on_policy_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) / 2
+            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) / 2 
+            self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) / 2
             self.n_drop_easy = 0
             self.n_drop_hard = 0
 
         
         original_df = self.train_dataset.dataframe.copy()
         
-        # Separate data by pass rate
-        perfect_mask = original_df["on_policy_pass_rate"] == 1.0
-        failed_mask = original_df["on_policy_pass_rate"] == 0.0
-        medium_mask = (original_df["on_policy_pass_rate"] > 0.0) & (original_df["on_policy_pass_rate"] < 1.0)
-        
-        # Get indices for each category
-        medium_indices = original_df[medium_mask].index.tolist()
-        perfect_indices = original_df[perfect_mask].index.tolist()
-        failed_indices = original_df[failed_mask].index.tolist()
-        
-        # Keep all medium difficulty data
-        kept_indices = set(medium_indices)
-        n_medium = len(medium_indices)
-        
-        # Limit perfect examples to 1/10 of medium examples
-        self.n_drop_easy = 0
-        if perfect_indices:
-            np.random.seed(42 + epoch_idx)
-            n_keep_perfect = max(1, min(n_medium // 10, len(perfect_indices)))
-            if n_keep_perfect > 0:
-                kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
-                kept_indices.update(kept_perfect)
-            self.n_drop_easy = len(perfect_indices) - n_keep_perfect
-        
-        # Limit failed examples to 1/5 of medium examples
-        self.n_drop_hard = 0
-        if failed_indices:
-            np.random.seed(43 + epoch_idx)
-            n_keep_failed = max(1, min(n_medium // 5, len(failed_indices)))
-            if n_keep_failed > 0:
-                kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
-                kept_indices.update(kept_failed)
-            self.n_drop_hard = len(failed_indices) - n_keep_failed
-        
-        dynamic_filtering = self.config.data.get("dynamic_filtering", False)
         if dynamic_filtering:
-            filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True)
+            # Separate data by pass rate
+            perfect_mask = original_df["prev_pass_rate"] == 1.0
+            failed_mask = original_df["prev_pass_rate"] == 0.0
+            medium_mask = (original_df["prev_pass_rate"] > 0.0) & (original_df["prev_pass_rate"] < 1.0)
+            
+            # Get indices for each category
+            medium_indices = original_df[medium_mask].index.tolist()
+            perfect_indices = original_df[perfect_mask].index.tolist()
+            failed_indices = original_df[failed_mask].index.tolist()
+            
+            # Keep all medium difficulty data
+            kept_indices = set(medium_indices)
+            n_medium = len(medium_indices)
+            
+            # Limit perfect examples to 1/10 of medium examples
+            self.n_drop_easy = 0
+            if perfect_indices:
+                np.random.seed(42 + epoch_idx)
+                n_keep_perfect = max(1, min(n_medium // 10, len(perfect_indices)))
+                if n_keep_perfect > 0:
+                    kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
+                    kept_indices.update(kept_perfect)
+                self.n_drop_easy = len(perfect_indices) - n_keep_perfect
+            
+            # Limit failed examples to 1/5 of medium examples
+            self.n_drop_hard = 0
+            if failed_indices:
+                np.random.seed(43 + epoch_idx)
+                n_keep_failed = max(1, min(n_medium // 5, len(failed_indices)))
+                if n_keep_failed > 0:
+                    kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
+                    kept_indices.update(kept_failed)
+                self.n_drop_hard = len(failed_indices) - n_keep_failed
+            
+            filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True) 
+            # Log filtering statistics
+            n_perfect_kept = len(set(perfect_indices) & kept_indices)
+            n_failed_kept = len(set(failed_indices) & kept_indices)
+            n_medium_kept = len(set(medium_indices) & kept_indices)
+            
+            print(f"Dataset filtering statistics for epoch {epoch_idx}:")
+            print(f"Original dataset size: {len(original_df)}")
+            print(f"  - Perfect examples (pass_rate=1.0): {len(perfect_indices)} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,len(perfect_indices))*100:.1f}%)")
+            print(f"  - Failed examples (pass_rate=0.0): {len(failed_indices)} -> {n_failed_kept} kept ({n_failed_kept/max(1,len(failed_indices))*100:.1f}%)")  
+            print(f"  - Medium examples (0<pass_rate<1): {len(medium_indices)} -> {n_medium_kept} kept ({n_medium_kept/max(1,len(medium_indices))*100:.1f}%)")
+            print(f"Filtered dataset size: {len(filtered_df)}")
+            print(f"Total discarded data points: {len(original_df) - len(filtered_df)}")
+            print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
         else:
             filtered_df = original_df.copy()
         
-        # Log filtering statistics
-        n_perfect_kept = len(set(perfect_indices) & kept_indices)
-        n_failed_kept = len(set(failed_indices) & kept_indices)
-        n_medium_kept = len(set(medium_indices) & kept_indices)
-        
-        print(f"Dataset filtering statistics for epoch {epoch_idx}:")
-        print(f"Original dataset size: {len(original_df)}")
-        print(f"  - Perfect examples (pass_rate=1.0): {len(perfect_indices)} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,len(perfect_indices))*100:.1f}%)")
-        print(f"  - Failed examples (pass_rate=0.0): {len(failed_indices)} -> {n_failed_kept} kept ({n_failed_kept/max(1,len(failed_indices))*100:.1f}%)")  
-        print(f"  - Medium examples (0<pass_rate<1): {len(medium_indices)} -> {n_medium_kept} kept ({n_medium_kept/max(1,len(medium_indices))*100:.1f}%)")
-        print(f"Filtered dataset size: {len(filtered_df)}")
-        print(f"Total discarded data points: {len(original_df) - len(filtered_df)}")
-        print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
-
-        # Shared logic for computing per_prompt_length_budget and creating dataloader
-        max_response_length = self.config.data.get("max_response_length", 1024*28)
-        pass_rate_upper_bound = self.config.data.get("pass_rate_upper_bound", 1.0)
-        per_prompt_length_budget = []
-        
-        for _, row in filtered_df.iterrows():
-            prompt_pass_rate = row['on_policy_pass_rate']
-            passed_prompt_avg_length = row['on_policy_passed_avg_length']
-            passed_prompt_max_length = row['on_policy_passed_max_length']
+        def assign_length_budget(row, pass_rate_upper_bound, max_response_length):
+            prompt_pass_rate = row['prev_pass_rate']
+            passed_prompt_avg_length = row['prev_passed_avg_length']
+            passed_prompt_max_length = row['prev_passed_max_length']
             
-            # Calculate new generation length based on pass rate with conditional strategy
-            if prompt_pass_rate > pass_rate_upper_bound:
-                # High pass rate: reduce the max length to 80% of previous max length
+            if prompt_pass_rate == 1.0:
+                new_length_budget = passed_prompt_max_length
+            elif prompt_pass_rate > pass_rate_upper_bound:
                 new_length_budget = max(0.8 * passed_prompt_max_length, passed_prompt_avg_length)
             else:
-                # Low pass rate: use scaling approach based on pass rate
                 new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
             
             new_length_budget = max(new_length_budget, 2000)  # Set minimum to 2000
             new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
-            per_prompt_length_budget.append(int(new_length_budget))
+            
+            return int(new_length_budget)
         
-        filtered_df["per_prompt_length_budget"] = per_prompt_length_budget
+        if enable_budget:
+            # Shared logic for computing per_prompt_length_budget and creating dataloader
+            max_response_length = self.config.data.get("max_response_length", 1024*28)
+            pass_rate_upper_bound = self.config.data.get("pass_rate_upper_bound", 1.0)
+
+
+            filtered_df["per_prompt_length_budget"] = filtered_df.apply(
+                lambda row: assign_length_budget(row, pass_rate_upper_bound, max_response_length), axis=1
+            )
+            filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
+        else:
+            filtered_df["per_prompt_length_budget"] = self.config.data.get("max_response_length", 1024*28)  # Use fixed length budget
         
         # Sort by per_prompt_length_budget for more efficient rollout batching
         filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
@@ -216,10 +220,11 @@ class RayDAPOTrainer(RayPPOTrainer):
         num_gen_batches = 0
         
         for epoch in range(self.config.trainer.total_epochs):
-            if self.config.trainer.vary_length:
-                train_dataset = self._create_priority_dataloader(epoch_idx=epoch)
-            else:
-                train_dataset = self.train_dataset
+            train_dataset = self._create_priority_dataloader(
+                epoch_idx=epoch,
+                dynamic_filtering=self.config.data.get("dynamic_filtering", False),
+                enable_budget=self.config.trainer.get("enable_budget", False),
+            )
             # create create the default_local_dir if not exists
             if not os.path.exists(self.config.trainer.default_local_dir):
                 os.makedirs(self.config.trainer.default_local_dir)
@@ -228,31 +233,10 @@ class RayDAPOTrainer(RayPPOTrainer):
 
             for batch_dict in self.train_dataloader:
                 metrics = {}
-
-                if self.config.trainer.vary_length:
-                    # Use pre-computed per_prompt_length_budget from the dataframe
-                    batch_prompt_ids = batch_dict["prompt_id"]
-                    per_prompt_length_budget = []
-                    per_prompt_pass_rate = []
-                    
-                    for prompt_id in batch_prompt_ids:
-                        row = train_dataset.dataframe[train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
-                        per_prompt_length_budget.append(int(row['per_prompt_length_budget']))
-                        per_prompt_pass_rate.append(row['on_policy_pass_rate'])
-                    
-                    # Log statistics
-                    avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
-                    avg_batch_max_length = np.mean(per_prompt_length_budget)
-                    
-                    print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
-                    print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_length_budget)}-{max(per_prompt_length_budget)})")
-                
                 # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
                 # DataLoader that yields batches of data across GPUs. 
                 # len(self.train_dataloader) * #GPUs = len(self.train_dataset)
                 # (bsz, seq_len)
-                
-
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 num_gen_batches += 1
                 # pop those keys for generation
@@ -269,10 +253,25 @@ class RayDAPOTrainer(RayPPOTrainer):
                     non_tensor_batch_keys=non_tensor_batch_keys_to_pop,
                 )
                 
-                if self.config.trainer.vary_length:
-                    # Set the individual generation lengths in non_tensor_batch
-                    gen_batch.non_tensor_batch["per_prompt_length_budget"] = np.array(per_prompt_length_budget, dtype=object)
-                    print(f"Set gen_batch.non_tensor_batch['per_prompt_length_budget'] to list of {len(per_prompt_length_budget)} lengths (avg: {avg_batch_max_length:.1f})")
+                # Use pre-computed per_prompt_length_budget from the dataframe
+                batch_prompt_ids = batch_dict["prompt_id"]
+                per_prompt_length_budget = []
+                per_prompt_pass_rate = []
+                
+                for prompt_id in batch_prompt_ids:
+                    row = train_dataset.dataframe[train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
+                    per_prompt_length_budget.append(int(row['per_prompt_length_budget']))
+                    per_prompt_pass_rate.append(row['prev_pass_rate'])
+                
+                # Log statistics
+                avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
+                avg_batch_max_length = np.mean(per_prompt_length_budget)
+                
+                print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
+                print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_length_budget)}-{max(per_prompt_length_budget)})")
+                print(f"Set gen_batch.non_tensor_batch['per_prompt_length_budget'] to list of {len(per_prompt_length_budget)} lengths (avg: {avg_batch_max_length:.1f})")
+                
+                gen_batch.non_tensor_batch["per_prompt_length_budget"] = np.array(per_prompt_length_budget, dtype=object)
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
@@ -412,7 +411,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
                     # Please take care when you implement group based adv computation such as GRPO and rloo
-                    if self.config.trainer.balance_batch and not self.config.trainer.vary_length:
+                    if self.config.trainer.balance_batch and not self.config.trainer.enable_budget:
                         self._balance_batch(batch, metrics=metrics)
 
                     # compute global_valid tokens
@@ -485,9 +484,9 @@ class RayDAPOTrainer(RayPPOTrainer):
                         # compute the pass rate for the batch 
                         temp_df = pd.DataFrame({
                             "prompt_id": batch.non_tensor_batch["prompt_id"],
-                            "on_policy_pass_rate": batch.non_tensor_batch["score"]
+                            "prev_pass_rate": batch.non_tensor_batch["score"]
                         })
-                        pass_rate_df = temp_df.groupby("prompt_id", as_index=False)["on_policy_pass_rate"].mean().set_index('prompt_id')[['on_policy_pass_rate']]
+                        pass_rate_df = temp_df.groupby("prompt_id", as_index=False)["prev_pass_rate"].mean().set_index('prompt_id')[['prev_pass_rate']]
                         
                         # compute the average response length for each prompt_id in the batch
                         # Only include lengths for successful rollouts (score == 1)
@@ -507,9 +506,9 @@ class RayDAPOTrainer(RayPPOTrainer):
                                 "response_length": successful_response_lengths
                             })
                             avg_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].mean().set_index('prompt_id')[['response_length']]
-                            avg_length_df.rename(columns={"response_length": "on_policy_passed_avg_length"}, inplace=True)
+                            avg_length_df.rename(columns={"response_length": "prev_passed_avg_length"}, inplace=True)
                             max_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].max().set_index('prompt_id')[['response_length']]
-                            max_length_df.rename(columns={"response_length": "on_policy_passed_max_length"}, inplace=True)
+                            max_length_df.rename(columns={"response_length": "prev_passed_max_length"}, inplace=True)
                             
                             # Update the dataframe with both pass rates and average lengths
                             self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
@@ -590,26 +589,23 @@ class RayDAPOTrainer(RayPPOTrainer):
                     
                     if len(batch_df) > 0:
                         metrics.update({
-                            "train/per_prompt_pass_rate_avg": batch_df["on_policy_pass_rate"].mean(),
-                            "train/per_prompt_pass_rate_std": batch_df["on_policy_pass_rate"].std(),
-                            "train/per_prompt_pass_rate_min": batch_df["on_policy_pass_rate"].min(),
-                            "train/per_prompt_pass_rate_max": batch_df["on_policy_pass_rate"].max(),
-                            "train/num_unique_prompts": len(unique_prompt_ids)
-                            })
-                    if self.config.data.get("vary_length", False):
-                        metrics.update({
+                            "train/per_prompt_pass_rate_avg": batch_df["prev_pass_rate"].mean(),
+                            "train/per_prompt_pass_rate_std": batch_df["prev_pass_rate"].std(),
+                            "train/per_prompt_pass_rate_min": batch_df["prev_pass_rate"].min(),
+                            "train/per_prompt_pass_rate_max": batch_df["prev_pass_rate"].max(),
+                            "train/num_unique_prompts": len(unique_prompt_ids),
                             "train/per_prompt_length_budget_avg": batch_df["per_prompt_length_budget"].mean(),
                             "train/per_prompt_length_budget_std": batch_df["per_prompt_length_budget"].std(),
                             "train/per_prompt_length_budget_min": batch_df["per_prompt_length_budget"].min(),
                             "train/per_prompt_length_budget_max": batch_df["per_prompt_length_budget"].max(),
-                            "train/on_policy_passed_max_length_avg": batch_df["on_policy_passed_max_length"].mean(),
-                            "train/on_policy_passed_max_length_std": batch_df["on_policy_passed_max_length"].std(),
-                            "train/on_policy_passed_max_length_min": batch_df["on_policy_passed_max_length"].min(),
-                            "train/on_policy_passed_max_length_max": batch_df["on_policy_passed_max_length"].max(),
-                            "train/on_policy_passed_avg_length_avg": batch_df["on_policy_passed_avg_length"].mean(),
-                            "train/on_policy_passed_avg_length_std": batch_df["on_policy_passed_avg_length"].std(),
-                            "train/on_policy_passed_avg_length_min": batch_df["on_policy_passed_avg_length"].min(),
-                            "train/on_policy_passed_avg_length_max": batch_df["on_policy_passed_avg_length"].max()
+                            "train/prev_passed_max_length_avg": batch_df["prev_passed_max_length"].mean(),
+                            "train/prev_passed_max_length_std": batch_df["prev_passed_max_length"].std(),
+                            "train/prev_passed_max_length_min": batch_df["prev_passed_max_length"].min(),
+                            "train/prev_passed_max_length_max": batch_df["prev_passed_max_length"].max(),
+                            "train/prev_passed_avg_length_avg": batch_df["prev_passed_avg_length"].mean(),
+                            "train/prev_passed_avg_length_std": batch_df["prev_passed_avg_length"].std(),
+                            "train/prev_passed_avg_length_min": batch_df["prev_passed_avg_length"].min(),
+                            "train/prev_passed_avg_length_max": batch_df["prev_passed_avg_length"].max()
                         })
 
                 metrics["train/num_gen_batches"] = num_gen_batches
@@ -636,9 +632,9 @@ class RayDAPOTrainer(RayPPOTrainer):
     def _save_dataset_state(self, local_global_step_folder):
         """
         Save the current dataset state including updated pass rates and lengths.
-        This is crucial for resuming training with vary_length feature.
+        This is crucial for resuming training with enable_budget feature.
         """
-        if not self.config.trainer.get('vary_length', False):
+        if not self.config.trainer.get('enable_budget', False):
             return
             
         dataset_state_path = os.path.join(local_global_step_folder, 'dataset_state.pt')
@@ -653,16 +649,16 @@ class RayDAPOTrainer(RayPPOTrainer):
         torch.save(dataset_state, dataset_state_path)
         print(f"Saved dataset state to {dataset_state_path}")
         print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
-        print(f"  - Pass rate range: {self.train_dataset.dataframe['on_policy_pass_rate'].min():.3f} - {self.train_dataset.dataframe['on_policy_pass_rate'].max():.3f}")
-        if 'on_policy_passed_max_length' in self.train_dataset.dataframe.columns:
-            print(f"  - Max length range: {self.train_dataset.dataframe['on_policy_passed_max_length'].min():.1f} - {self.train_dataset.dataframe['on_policy_passed_max_length'].max():.1f}")
+        print(f"  - Pass rate range: {self.train_dataset.dataframe['prev_pass_rate'].min():.3f} - {self.train_dataset.dataframe['prev_pass_rate'].max():.3f}")
+        if 'prev_passed_max_length' in self.train_dataset.dataframe.columns:
+            print(f"  - Max length range: {self.train_dataset.dataframe['prev_passed_max_length'].min():.1f} - {self.train_dataset.dataframe['prev_passed_max_length'].max():.1f}")
 
     def _load_dataset_state(self, global_step_folder):
         """
         Load the dataset state including updated pass rates and lengths.
         This restores the learned statistics from previous training.
         """
-        if not self.config.trainer.get('vary_length', False):
+        if not self.config.trainer.get('enable_budget', False):
             return
             
         dataset_state_path = os.path.join(global_step_folder, 'dataset_state.pt')
@@ -678,11 +674,11 @@ class RayDAPOTrainer(RayPPOTrainer):
             
             print(f"Restored dataset state:")
             print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
-            print(f"  - Pass rate range: {self.train_dataset.dataframe['on_policy_pass_rate'].min():.3f} - {self.train_dataset.dataframe['on_policy_pass_rate'].max():.3f}")
-            if 'on_policy_passed_avg_length' in self.train_dataset.dataframe.columns:
-                print(f"  - Avg length range: {self.train_dataset.dataframe['on_policy_passed_avg_length'].min():.1f} - {self.train_dataset.dataframe['on_policy_passed_avg_length'].max():.1f}")
-            if 'on_policy_passed_max_length' in self.train_dataset.dataframe.columns:
-                print(f"  - Max length range: {self.train_dataset.dataframe['on_policy_passed_max_length'].min():.1f} - {self.train_dataset.dataframe['on_policy_passed_max_length'].max():.1f}")
+            print(f"  - Pass rate range: {self.train_dataset.dataframe['prev_pass_rate'].min():.3f} - {self.train_dataset.dataframe['prev_pass_rate'].max():.3f}")
+            if 'prev_passed_avg_length' in self.train_dataset.dataframe.columns:
+                print(f"  - Avg length range: {self.train_dataset.dataframe['prev_passed_avg_length'].min():.1f} - {self.train_dataset.dataframe['prev_passed_avg_length'].max():.1f}")
+            if 'prev_passed_max_length' in self.train_dataset.dataframe.columns:
+                print(f"  - Max length range: {self.train_dataset.dataframe['prev_passed_max_length'].min():.1f} - {self.train_dataset.dataframe['prev_passed_max_length'].max():.1f}")
         else:
             print(f"No dataset state found at {dataset_state_path}, starting with original dataset")
             self.n_drop_easy = 0
@@ -690,18 +686,18 @@ class RayDAPOTrainer(RayPPOTrainer):
 
     def _save_checkpoint(self):
         """
-        Override to include dataset state saving for vary_length feature.
+        Override to include dataset state saving for enable_budget feature.
         """
         # Call parent method to save models and dataloader
         super()._save_checkpoint()
         
-        # Save additional dataset state for vary_length
+        # Save additional dataset state for enable_budget
         local_global_step_folder = os.path.join(self.config.trainer.default_local_dir, f"global_step_{self.global_steps}")
         self._save_dataset_state(local_global_step_folder)
 
     def _load_checkpoint(self):
         """
-        Override to include dataset state loading for vary_length feature.
+        Override to include dataset state loading for enable_budget feature.
         """
         # Store original global_steps to detect if we loaded from checkpoint
         original_global_steps = self.global_steps

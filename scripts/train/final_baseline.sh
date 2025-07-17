@@ -152,7 +152,7 @@ use_kl_loss=False
 kl_loss_coef=0.0
 
 clip_ratio_low=0.2
-clip_ratio_high=0.28
+clip_ratio_high=0.24
 
 max_prompt_length=$((1024 * 4))
 max_response_length=$((1024 * 28))
@@ -270,7 +270,7 @@ offload=True
     +trainer.val_generations_to_log_to_wandb=30 \
     trainer.resume_mode=auto \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.vary_length=False \
+    +trainer.enable_budget=False \
     +data.dynamic_filtering=False \
     +data.pass_rate_upper_bound=1.0 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate

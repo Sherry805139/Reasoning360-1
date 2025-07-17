@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=final-filter-sort-decrease
+#SBATCH --job-name=final-sort
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -271,6 +271,6 @@ offload=True
     trainer.resume_mode=auto \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.enable_budget=True \
-    +data.dynamic_filtering=True \
-    +data.pass_rate_upper_bound=0.8 \
+    +data.dynamic_filtering=False \
+    +data.pass_rate_upper_bound=1 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate
