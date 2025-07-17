@@ -171,10 +171,6 @@ algorithm:
     kl_coef: 0.001
     horizon: 10000
     target_kl: 0.1
-  use_pf_ppo: False
-  pf_ppo:
-    reweight_method: pow  # ["pow", "max_min", "max_random"]
-    weight_pow: 2.0
   filter_groups:  # NOTE: added by Reasoning360
     enable: False # We try to avoid forgetting to set enable
     metric: null # acc / score / seq_reward / seq_final_reward / ...

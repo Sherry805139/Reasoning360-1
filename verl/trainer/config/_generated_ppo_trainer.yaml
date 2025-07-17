@@ -356,6 +356,12 @@ algorithm:
     kl_coef: 0.001
     horizon: 10000
     target_kl: 0.1
+  filter_groups:
+    enable: false
+    metric: null
+    max_num_gen_batches: 0
+    horizon: 10000
+    target_kl: 0.1
   use_pf_ppo: false
   pf_ppo:
     _target_: verl.trainer.config.PFPPOConfig
