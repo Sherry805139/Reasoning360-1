@@ -1,6 +1,8 @@
 GSM8K Example
 =============
 
+Last updated: 03/25/2025.
+
 Introduction
 ------------
 
@@ -90,11 +92,20 @@ We also provide various training scripts for SFT on GSM8K dataset in `gsm8k sft 
        data.response_key=answer \
        data.micro_batch_size_per_gpu=8 \
        model.partial_pretrain=deepseek-ai/deepseek-coder-6.7b-instruct \
-       trainer.default_hdfs_dir=hdfs://user/verl/experiments/gsm8k/deepseek-coder-6.7b-instruct/ \
        trainer.project_name=gsm8k-sft \
        trainer.experiment_name=gsm8k-sft-deepseek-coder-6.7b-instruct \
        trainer.total_epochs=4 \
-       trainer.logger=['console','wandb']
+       trainer.logger='["console","wandb"]'
+
+
+If you use AMD GPUs (ROCm kernel), you need to add the following environment variables into the run script:
+
+    .. code-block:: bash
+
+        export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+        export ROCR_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES
+        export CUDA_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES
+
 
 
 If you use AMD GPUs (ROCm kernel), you need to add the following environment variables into the run script:
@@ -168,7 +179,7 @@ The script of run_deepseek7b_llm.sh
       critic.model.fsdp_config.optimizer_offload=False \
       algorithm.kl_ctrl.kl_coef=0.001 \
       trainer.critic_warmup=0 \
-      trainer.logger=['console','wandb'] \
+      trainer.logger='["console","wandb"]' \
       trainer.project_name='verl_example_gsm8k' \
       trainer.experiment_name='deepseek_llm_7b_function_rm' \
       trainer.n_gpus_per_node=8 \

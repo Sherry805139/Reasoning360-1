@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .registry import get_reward_manager_cls, register  # noqa: I001
 from .batch import BatchRewardManager
 from .dapo import DAPORewardManager
 from .naive import NaiveRewardManager
@@ -22,7 +23,10 @@ from .naive_parallel import NaiveParallelRewardManager
 from .async_dapo import AsyncDAPORewardManager
 from .llm_judge import LLMJudgeRewardManager
 
-__all__ = ["BatchRewardManager", "DAPORewardManager", "NaiveRewardManager", "PrimeRewardManager",
-           # Added by Reasoning360
-           "NaiveParallelRewardManager", "AsyncDAPORewardManager", "LLMJudgeRewardManager",
-           ]
+__all__ = [
+    "BatchRewardManager", "DAPORewardManager", "NaiveRewardManager", "PrimeRewardManager",
+    "register",
+    "get_reward_manager_cls",
+    # Added by Reasoning360
+    "NaiveParallelRewardManager", "AsyncDAPORewardManager", "LLMJudgeRewardManager",
+]
