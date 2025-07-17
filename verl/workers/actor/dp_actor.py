@@ -341,10 +341,6 @@ class DataParallelPPOActor(BasePPOActor):
         if calculate_entropy:
             entropys = torch.concat(entropy_lst, dim=0)
 
-        log_probs = torch.concat(log_probs_lst, dim=0)
-        entropys = None
-        if calculate_entropy:
-            entropys = torch.concat(entropy_lst, dim=0)
         if use_dynamic_bsz:
             log_probs = restore_dynamic_batch(log_probs, batch_idx_list)
             if calculate_entropy:

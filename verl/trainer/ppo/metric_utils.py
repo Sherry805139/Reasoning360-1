@@ -187,6 +187,26 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         metrics["num_turns/max"] = num_turns.max()
         metrics["num_turns/mean"] = num_turns.mean()
 
+    # Add data source specific response length metrics
+    for data_source, lengths in data_source_response_lengths.items():
+        lengths_tensor = torch.tensor(lengths)
+        metrics.update({
+            f"response_length/{data_source}/mean": torch.mean(lengths_tensor).item(),
+            f"response_length/{data_source}/max": torch.max(lengths_tensor).item(),
+            f"response_length/{data_source}/min": torch.min(lengths_tensor).item(),
+            f"response_length/{data_source}/clip_ratio": torch.mean(torch.eq(lengths_tensor, max_response_length).float()).item(),
+        })
+
+    # Add data source specific reward metrics
+    for data_source, scores in data_source_scores.items():
+        scores_tensor = torch.tensor(scores)
+        metrics.update({
+            f"critic/scores/{data_source}/mean": torch.mean(scores_tensor).item(),
+            f"critic/scores/{data_source}/max": torch.max(scores_tensor).item(),
+            f"critic/scores/{data_source}/min": torch.min(scores_tensor).item(),
+            f"critic/scores/{data_source}/std": torch.std(scores_tensor).item(),
+        })
+
     return metrics
 
 
@@ -245,11 +265,13 @@ def compute_throughout_metrics(batch: DataProto, timing_raw: dict[str, float], n
         timing_raw: A dictionary mapping stage names to their execution times in seconds.
                    Must contain a "step" key with the total step time.
         n_gpus: Number of GPUs used for training.
+
     Returns:
         A dictionary containing:
             - perf/total_num_tokens: Total number of tokens processed in the batch
             - perf/time_per_step: Time taken for the step in seconds
             - perf/throughput: Tokens processed per second per GPU
+
     Note:
         The throughput is calculated as total_tokens / (time * n_gpus) to normalize
         across different GPU counts.
@@ -368,6 +390,7 @@ def process_validation_metrics(
                 }
             }
         }
+
         Where metric_name includes:
         - "mean@N": Mean value across N samples
         - "std@N": Standard deviation across N samples
@@ -377,6 +400,7 @@ def process_validation_metrics(
         - "worst@N/std": Standard deviation of the worst values in bootstrap samples
         - "maj@N/mean": Mean of majority voting results in bootstrap samples (if "pred" exists)
         - "maj@N/std": Standard deviation of majority voting results (if "pred" exists)
+
     Example:
         >>> data_sources = ["source1", "source1", "source2"]
         >>> sample_inputs = ["prompt1", "prompt1", "prompt2"]

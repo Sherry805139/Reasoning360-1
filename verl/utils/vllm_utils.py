@@ -135,6 +135,7 @@ class VLLMHijack:
 
                 lora_tensors = None
                 from vllm.lora.peft_helper import PEFTHelper
+
                 if isinstance(lora_request, TensorLoRARequest):
                     peft_config = lora_request.peft_config
                     lora_tensors = lora_request.lora_tensors

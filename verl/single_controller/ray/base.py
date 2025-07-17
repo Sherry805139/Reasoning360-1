@@ -121,9 +121,10 @@ class RayResourcePool(ResourcePool):
 
         lifetime = "detached" if self.detached else None
 
-        lifetime = "detached" if self.detached else None
-
-        pgs = [placement_group(bundles=bundles, strategy=strategy, name=pg_name_prefix + str(idx), lifetime=lifetime) for idx, bundles in enumerate(pg_scheme)]
+        pgs = [
+            placement_group(bundles=bundles, strategy=strategy, name=pg_name_prefix + str(idx), lifetime=lifetime)
+            for idx, bundles in enumerate(pg_scheme)
+        ]
 
         ray.get([pg.ready() for pg in pgs])
 

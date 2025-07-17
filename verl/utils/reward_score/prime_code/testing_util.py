@@ -48,6 +48,7 @@ class CODE_TYPE(Enum):
     call_based = 0
     standard_input = 1
 
+
 # used to capture stdout as a list
 # from https://stackoverflow.com/a/16571630/6416660
 # alternative use redirect_stdout() from contextlib
@@ -382,7 +383,9 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                 if isinstance(in_outs["outputs"][index], list):
                     for tmp_index, i in enumerate(in_outs["outputs"][index]):
                         in_outs["outputs"][index][tmp_index] = i.split("\n")
-                        in_outs["outputs"][index][tmp_index] = [x.strip() for x in in_outs["outputs"][index][tmp_index] if x]
+                        in_outs["outputs"][index][tmp_index] = [
+                            x.strip() for x in in_outs["outputs"][index][tmp_index] if x
+                        ]
                 else:
                     in_outs["outputs"][index] = in_outs["outputs"][index].split("\n")
                     in_outs["outputs"][index] = list(filter(len, in_outs["outputs"][index]))

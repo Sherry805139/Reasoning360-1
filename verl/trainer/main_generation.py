@@ -269,6 +269,23 @@ def main_task(config):
         print(f"Saved merged AIME responses to {config.data.output_path}")
     else:
         # NOTE: added by Reasoning360. dump results
+        if is_polars_df:
+            import polars as pl
+
+            dataset = dataset.with_columns(pl.Series("responses", output_lst))
+            # write to a new parquet
+            output_dir = os.path.dirname(config.data.output_path)
+            makedirs(output_dir, exist_ok=True)
+            dataset.write_parquet(config.data.output_path)
+        else:
+            # For pandas, use standard bracket assignment
+            dataset["responses"] = output_lst
+            # write to a new parquet
+            output_dir = os.path.dirname(config.data.output_path)
+            makedirs(output_dir, exist_ok=True)
+            dataset.to_parquet(config.data.output_path)
+
+        # NOTE: added by Reasoning360. dump results
         result_list = [
             {
                 "prompt": chat,

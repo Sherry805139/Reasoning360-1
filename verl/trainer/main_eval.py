@@ -11,20 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
-Offline evaluation script for generated sequences using a reward model and ground truth verifier.
-
-This script reads a parquet file containing generated sequences and (optionally) ground truth,
-computes reward scores for each response, and calculates pass@k metrics using an unbiased estimator.
-Results are saved as a JSON file for further analysis.
-
-Usage:
-    python main_eval.py
+Offline evaluate the performance of a generated file using reward model and ground truth verifier.
+The input is a parquet file that contains N generated sequences and (optional) the ground truth.
 """
-
-import json
-from collections import defaultdict
 
 from collections import defaultdict
 

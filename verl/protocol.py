@@ -22,7 +22,7 @@ import logging
 import os
 import pickle
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -783,10 +783,15 @@ class DataProto:
         if self.batch is not None:
             if interleave:
                 # Interleave the data
-                repeated_tensors = {key: tensor.repeat_interleave(repeat_times, dim=0) for key, tensor in self.batch.items()}
+                repeated_tensors = {
+                    key: tensor.repeat_interleave(repeat_times, dim=0) for key, tensor in self.batch.items()
+                }
             else:
                 # Stack the data
-                repeated_tensors = {key: tensor.unsqueeze(0).expand(repeat_times, *tensor.shape).reshape(-1, *tensor.shape[1:]) for key, tensor in self.batch.items()}
+                repeated_tensors = {
+                    key: tensor.unsqueeze(0).expand(repeat_times, *tensor.shape).reshape(-1, *tensor.shape[1:])
+                    for key, tensor in self.batch.items()
+                }
 
             repeated_batch = TensorDict(
                 source=repeated_tensors,

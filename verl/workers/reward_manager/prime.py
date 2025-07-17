@@ -85,16 +85,6 @@ async def parallel_compute_score_async(
             scores.append(float(result[0]))
     return scores
 
-def run_reward_scoring(evaluation_func, completions, references, tasks, extra_info=None, num_processes=64):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(parallel_compute_score_async(
-            evaluation_func, completions, references, tasks, extra_info, num_processes
-        ))
-    finally:
-        loop.close()
-
 
 def run_reward_scoring(evaluation_func, completions, references, tasks, extra_info=None, num_processes=64):
     loop = asyncio.new_event_loop()

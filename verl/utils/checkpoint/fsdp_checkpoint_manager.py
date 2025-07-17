@@ -292,24 +292,6 @@ class FSDPCheckpointManager(BaseCheckpointManager):
             with open(fsdp_config_path, "w") as f:
                 json.dump(asdict(fsdp_config), f, indent=4)
 
-        if self.rank == 0:
-            if fsdp_version(self.model) == 1:
-                unwrap_model = self.model._fsdp_wrapped_module
-            else:
-                unwrap_model = self.model
-
-            model_config = unwrap_model.config
-            if unwrap_model.can_generate() and hasattr(model_config, "name_or_path") and model_config.name_or_path:
-                # Some model's name_or_path is empty if not initialized from pretrained,
-                # in this cases, we don't save generation config.
-                generation_config = GenerationConfig.from_pretrained(model_config.name_or_path)
-                generation_config.save_pretrained(local_path)
-            else:
-                generation_config = None
-
-            model_config.save_pretrained(local_path)
-            self.processing_class.save_pretrained(local_path)
-
         # wait for everyone to dump to local
         torch.distributed.barrier()
 

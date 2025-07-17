@@ -15,12 +15,8 @@
 import inspect
 from functools import wraps
 from types import FunctionType
-<<<<<<< HEAD
-from typing import Dict, List, Tuple
 
-import torch
-=======
->>>>>>> official/main
+import torch # Added by Reasoning360
 
 from verl.protocol import DataProtoFuture, _padding_size_key
 from verl.utils.py_functional import DynamicEnum
@@ -91,49 +87,6 @@ def _split_args_kwargs_data_proto(chunks, *args, **kwargs):
     splitted_kwargs = {}
     for key, val in kwargs.items():
         assert isinstance(val, DataProto | DataProtoFuture)
-        splitted_kwargs[key] = val.chunk(chunks=chunks)
-
-    return splitted_args, splitted_kwargs
-
-
-def _split_args_kwargs_data_proto_with_auto_padding(chunks, *args, **kwargs):
-    from verl.protocol import DataProto, DataProtoFuture
-
-    splitted_args = []
-    splitted_kwargs = {}
-
-    data_proto_len = None
-    padding_size = None
-    for arg in args:
-        assert isinstance(arg, DataProto | DataProtoFuture)
-        if isinstance(arg, DataProto) and arg.is_padding_enabled():
-            # for padding, we only support DataProto with same length
-            if data_proto_len is None:
-                data_proto_len = len(arg)
-                padding_size = (chunks - (data_proto_len % chunks)) if (data_proto_len % chunks > 0) else 0
-                splitted_kwargs[_padding_size_key] = padding_size
-            else:
-                assert data_proto_len == len(arg), (
-                    f"expecting all arg share same length of {data_proto_len}, but got {len(arg)}"
-                )
-                data_proto_len = len(arg)
-            arg.padding(padding_size=padding_size)
-
-        splitted_args.append(arg.chunk(chunks=chunks))
-
-    for key, val in kwargs.items():
-        assert isinstance(val, DataProto | DataProtoFuture)
-        if isinstance(val, DataProto) and val.is_padding_enabled():
-            # for padding, we only support DataProto with same length
-            if data_proto_len is None:
-                data_proto_len = len(val)
-                padding_size = chunks - (data_proto_len % chunks)
-                splitted_kwargs[_padding_size_key] = padding_size
-            else:
-                assert data_proto_len == len(val), (
-                    f"expecting all arg share same length of {data_proto_len}, but got {len(val)}"
-                )
-                data_proto_len = len(val)
         splitted_kwargs[key] = val.chunk(chunks=chunks)
 
     return splitted_args, splitted_kwargs

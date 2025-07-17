@@ -79,21 +79,6 @@ class Role(Enum):
     ActorRolloutRef = 6
 
 
-class AdvantageEstimator(str, Enum):
-    """
-    Using an enumeration class to avoid spelling errors in adv_estimator
-    """
-
-    GAE = "gae"
-    GRPO = "grpo"
-    REINFORCE_PLUS_PLUS = "reinforce_plus_plus"
-    REINFORCE_PLUS_PLUS_BASELINE = "reinforce_plus_plus_baseline"
-    REMAX = "remax"
-    RLOO = "rloo"
-    OPO = "opo"
-    GRPO_PASSK = "grpo_passk"
-
-
 @dataclass
 class ResourcePoolManager:
     """
@@ -708,9 +693,6 @@ class RayPPOTrainer:
             test_batch = DataProto.from_single_dict(test_data)
             # NOTE: print statements in this loop added by Reasoning360 are temporarily disabled
             # print(f"Shape of test_batch: {test_batch.batch['input_ids'].shape}")
-
-            # repeat test batch
-            test_batch = test_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.val_kwargs.n, interleave=True)
 
             # repeat test batch
             test_batch = test_batch.repeat(

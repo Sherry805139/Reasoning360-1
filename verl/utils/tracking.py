@@ -22,8 +22,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-class Tracking:
-    """A unified tracking interface for logging experiment data to multiple backends.
 
 class Tracking:
     """A unified tracking interface for logging experiment data to multiple backends.
@@ -382,6 +380,7 @@ class ValidationGenerationsLogger:
             table_plot=pd.DataFrame.from_records(table),
             iteration=step,
         )
+
     def log_generations_to_tensorboard(self, samples, step):
         """Log samples to tensorboard as text"""
         # Initialize tensorboard writer if not exists

@@ -15,12 +15,12 @@
 Contain small python utility functions
 """
 
-from contextlib import contextmanager
 import importlib
 import multiprocessing
 import os
 import queue  # Import the queue module for exception type hint
 import signal
+from contextlib import contextmanager
 from functools import wraps
 from types import SimpleNamespace
 from typing import Any, Callable, Iterator, Optional

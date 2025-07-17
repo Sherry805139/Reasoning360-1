@@ -304,7 +304,7 @@ def math_equal(
                     reference.lstrip("\\begin{pmatrix}")  # noqa: B005
                     .lstrip("\begin{pmatrix}")
                     .rstrip("\\end{pmatrix}")
-                    .rstrip("\end{pmatrix}")
+                    .rstrip("\\end{pmatrix}")
                 )  # noqa: B005
                 ref_matrix_items = ref_matrix_items.split("\\")
                 ref_matrix_items = [row.split("&") if "&" in row else row for row in ref_matrix_items]
@@ -357,6 +357,7 @@ def symbolic_equal(a, b, tolerance, timeout=10.0):
     except Exception:
         pass
     return False
+
 
 def format_intervals(prediction):
     patterns = {
