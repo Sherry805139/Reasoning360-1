@@ -65,6 +65,7 @@ def create_device_mesh(world_size, fsdp_size):
 
 def get_sharding_strategy(device_mesh):
     from torch.distributed.fsdp import ShardingStrategy
+
     if device_mesh.ndim == 1:
         sharding_strategy = ShardingStrategy.FULL_SHARD
     elif device_mesh.ndim == 2:

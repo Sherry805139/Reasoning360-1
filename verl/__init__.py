@@ -24,13 +24,6 @@ from .protocol import DataProto
 from .utils.device import is_npu_available
 from .utils.logging_utils import set_basic_config
 
-import pkg_resources
-from packaging.version import parse as parse_version
-from pkg_resources import DistributionNotFound
-
-from .protocol import DataProto
-from .utils.device import is_npu_available
-from .utils.logging_utils import set_basic_config
 
 version_folder = os.path.dirname(os.path.join(os.path.abspath(__file__)))
 

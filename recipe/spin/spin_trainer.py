@@ -72,6 +72,7 @@ class ResourcePoolManager:
     Define a resource pool specification. Resource pool will be initialized first.
     Mapping
     """
+
     resource_pool_spec: dict[str, list[int]]
     mapping: dict[Role, str]
     resource_pool_dict: dict[str, RayResourcePool] = field(default_factory=dict)
@@ -755,6 +756,7 @@ class RaySPINTrainer:
                     metric_dict[pfx] = metric_val
 
         return metric_dict
+
     def init_workers(self):
         """Init resource pool and worker group"""
         self.resource_pool_manager.create_resource_pool()

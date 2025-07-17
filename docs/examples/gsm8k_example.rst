@@ -107,16 +107,6 @@ If you use AMD GPUs (ROCm kernel), you need to add the following environment var
         export CUDA_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES
 
 
-
-If you use AMD GPUs (ROCm kernel), you need to add the following environment variables into the run script:
-
-    .. code-block:: bash
-
-        export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-        export ROCR_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES
-        export CUDA_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES
-
-
 Step 4: Perform PPO training with your model on GSM8K Dataset
 -------------------------------------------------------------
 
