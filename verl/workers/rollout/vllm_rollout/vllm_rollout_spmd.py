@@ -178,7 +178,8 @@ class vLLMRollout(BaseRollout):
             enable_chunked_prefill=config.enable_chunked_prefill,
             enable_prefix_caching=True,
             trust_remote_code=trust_remote_code,
-            seed=int(os.getenv("RANK", "0")) // tensor_parallel_size,   # NOTE: modified by Reasoning360. Originally config.get("seed", 0)
+            seed=int(os.getenv("RANK", "0"))
+            // tensor_parallel_size,  # NOTE: modified by Reasoning360. Originally config.get("seed", 0)
             **lora_kwargs,
             **engine_kwargs,
         )
@@ -325,12 +326,8 @@ class vLLMRollout(BaseRollout):
                     LoRARequest(lora_name=f"{lora_int_id}", lora_int_id=lora_int_id, lora_path="/simon-stub-path")
                 ] * batch_size
 
-        # NOTE: added by Reasoning360
-        if "num_samples" in prompts.meta_info:
-            kwargs["n"] = prompts.meta_info["num_samples"]
-
         # users can customize different sampling_params at different run
-        with self.update_sampling_params(**kwargs), self.timer() as t:
+        with self.update_sampling_params(**kwargs), self.timer():
             outputs = self.inference_engine.generate(
                 prompts=vllm_inputs,  # because we have already convert it to prompt token id
                 sampling_params=self.sampling_params,
@@ -380,13 +377,6 @@ class vLLMRollout(BaseRollout):
             response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype
         )
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
-
-        # NOTE: added by Reasoning360. temporarily disabled to avoid messy logging
-        # tokens_per_second = torch.sum(response_attention_mask).item() / t()
-        # print(
-        #     f'Tokens per second: {tokens_per_second} t/s on device {os.environ["CUDA_VISIBLE_DEVICES"]} on host {os.uname().nodename}',
-        #     flush=True,
-        # )
 
         # all the tp ranks should contain the same data here. data in all ranks are valid
         batch = TensorDict(
