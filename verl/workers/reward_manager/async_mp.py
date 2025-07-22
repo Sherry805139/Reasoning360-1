@@ -13,25 +13,34 @@
 # limitations under the License.
 
 import asyncio
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from functools import partial
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+
 import numpy as np
+import torch
 
 from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
-import torch
+from verl.workers.reward_manager import register
 
 
-async def single_compute_score(compute_score_fn, data_source, solution_str, ground_truth, extra_info, executor, timeout=300.):
+async def single_compute_score(
+    compute_score_fn, data_source, solution_str, ground_truth, extra_info, executor, timeout=300.0
+):
     loop = asyncio.get_running_loop()
     try:
         tasks = [
             asyncio.wait_for(
                 loop.run_in_executor(
                     executor,
-                    partial(compute_score_fn, data_source=data_source, solution_str=solution_str, 
-                            ground_truth=ground_truth, extra_info=extra_info)
+                    partial(
+                        compute_score_fn,
+                        data_source=data_source,
+                        solution_str=solution_str,
+                        ground_truth=ground_truth,
+                        extra_info=extra_info,
+                    ),
                 ),
                 timeout=timeout,
             )
@@ -45,22 +54,30 @@ async def single_compute_score(compute_score_fn, data_source, solution_str, grou
         return None
 
 
-async def parallel_compute_score_async(compute_score_fn, data_sources, solutions, ground_truths, 
-                                      extra_infos, num_processes=64, batch_size=None, shuffle=False):
+async def parallel_compute_score_async(
+    compute_score_fn,
+    data_sources,
+    solutions,
+    ground_truths,
+    extra_infos,
+    num_processes=64,
+    batch_size=None,
+    shuffle=False,
+):
     # If batch_size is not set, process all items at once
     if batch_size is None or batch_size <= 0:
         batch_size = len(data_sources)
-    
+
     # Create indices for tracking original positions
     indices = list(range(len(data_sources)))
-    
+
     # Shuffle data if required
     if shuffle:
         # Create a copy of the original indices for restoring order later
         original_indices = indices.copy()
         # Create shuffled indices
         shuffled_indices = np.random.permutation(len(data_sources))
-        
+
         # Apply shuffling to all data arrays
         data_sources = [data_sources[i] for i in shuffled_indices]
         solutions = [solutions[i] for i in shuffled_indices]
@@ -68,45 +85,45 @@ async def parallel_compute_score_async(compute_score_fn, data_sources, solutions
         extra_infos = [extra_infos[i] for i in shuffled_indices]
         # Map shuffled positions to original indices
         indices = [original_indices[i] for i in shuffled_indices]
-    
+
     results = [None] * len(data_sources)
-    
+
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
         # Process data in batches
         for start_idx in range(0, len(data_sources), batch_size):
             end_idx = min(start_idx + batch_size, len(data_sources))
-            
+
             # Create tasks for current batch
             tasks_async = [
                 single_compute_score(
-                    compute_score_fn, 
-                    data_sources[i], 
-                    solutions[i], 
-                    ground_truths[i], 
-                    extra_infos[i], 
-                    executor, 
-                    timeout=300.
+                    compute_score_fn,
+                    data_sources[i],
+                    solutions[i],
+                    ground_truths[i],
+                    extra_infos[i],
+                    executor,
+                    timeout=300.0,
                 )
                 for i in range(start_idx, end_idx)
             ]
-            
+
             # Handle potential exceptions to prevent process starvation
             try:
                 batch_results = await asyncio.gather(*tasks_async, return_exceptions=False)
-                
+
                 # Store results in their correct positions
                 for i, result in enumerate(batch_results):
                     actual_idx = start_idx + i
                     results[actual_idx] = result
-                    
-            except Exception as e:
+
+            except Exception:
                 for pid, proc in executor._processes.items():
                     try:
                         proc.kill()
                     except Exception as kill_err:
-                        print('shut down failed: ' + str(kill_err))
+                        print("shut down failed: " + str(kill_err))
                 raise
-    
+
     # Restore original order if data was shuffled
     if shuffle:
         # Create a mapping to restore original order
@@ -114,24 +131,26 @@ async def parallel_compute_score_async(compute_score_fn, data_sources, solutions
         for i, original_idx in enumerate(indices):
             ordered_results[original_idx] = results[i]
         results = ordered_results
-    
+
     return results
 
 
-class AsyncDAPORewardManager:
-    """The reward manager.
-    """
+@register("async_multi_process")
+class AsyncMultiProcessRewardManager:
+    """The reward manager."""
 
-    def __init__(self,
-                 tokenizer,
-                 num_examine,
-                 compute_score=None,
-                 reward_fn_key='data_source',
-                 max_resp_len=None,
-                 overlong_buffer_cfg=None,
-                 batch_size=2048,
-                 shuffle_batch=True,
-                 **kwargs) -> None:
+    def __init__(
+        self,
+        tokenizer,
+        num_examine,
+        compute_score=None,
+        reward_fn_key="data_source",
+        max_resp_len=None,
+        overlong_buffer_cfg=None,
+        batch_size=2048,
+        shuffle_batch=True,
+        **kwargs,
+    ) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
@@ -142,20 +161,22 @@ class AsyncDAPORewardManager:
         self.shuffle_batch = shuffle_batch
 
         if self.overlong_buffer_cfg is not None:
-            assert self.max_resp_len is not None, f"max_resp_len must be provided if {overlong_buffer_cfg=}, but got None"
+            assert self.max_resp_len is not None, (
+                f"max_resp_len must be provided if {overlong_buffer_cfg=}, but got None"
+            )
 
     def __call__(self, data: DataProto, return_dict: bool = False):
         """We will expand this function gradually based on the available datasets"""
 
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
-        if 'rm_scores' in data.batch.keys():
+        if "rm_scores" in data.batch.keys():
             if return_dict:
-                return {"reward_tensor": data.batch['rm_scores']}
+                return {"reward_tensor": data.batch["rm_scores"]}
             else:
-                return data.batch['rm_scores']
+                return data.batch["rm_scores"]
 
         # print(f"[DEBUG] data.batch['responses'] shape: {data.batch['responses'].shape}")
-        reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
+        reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
         # print(f"[DEBUG] reward_tensor initial shape: {reward_tensor.shape}")
 
         # Add this to understand DataProto structure
@@ -173,7 +194,7 @@ class AsyncDAPORewardManager:
         for i in range(len(data)):
             data_source = data[i].non_tensor_batch[self.reward_fn_key]
             data_source_counts[data_source] += 1
-        
+
         # print(f"[DEBUG] Data source distribution: {dict(data_source_counts)}")
 
         # Check if any data is being filtered
@@ -182,9 +203,12 @@ class AsyncDAPORewardManager:
             if self.reward_fn_key not in data_item.non_tensor_batch:
                 # print(f"[DEBUG] Warning: Item {i} missing reward_fn_key '{self.reward_fn_key}'")
                 pass
-            
+
             # Check if ground truth exists
-            if 'reward_model' not in data_item.non_tensor_batch or 'ground_truth' not in data_item.non_tensor_batch['reward_model']:
+            if (
+                "reward_model" not in data_item.non_tensor_batch
+                or "ground_truth" not in data_item.non_tensor_batch["reward_model"]
+            ):
                 # print(f"[DEBUG] Warning: Item {i} missing ground_truth")
                 pass
 
@@ -200,30 +224,30 @@ class AsyncDAPORewardManager:
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
-            prompt_ids = data_item.batch['prompts']
+            prompt_ids = data_item.batch["prompts"]
             prompt_length = prompt_ids.shape[-1]
 
-            valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+            valid_prompt_length = data_item.batch["attention_mask"][:prompt_length].sum()
             valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
-            response_ids = data_item.batch['responses']
-            valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
+            response_ids = data_item.batch["responses"]
+            valid_response_length = data_item.batch["attention_mask"][prompt_length:].sum()
             valid_response_lengths.append(valid_response_length)
             valid_response_ids = response_ids[:valid_response_length]
 
             # decode
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             prompt_strs.append(prompt_str)
-            
+
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
             eos_token = self.tokenizer.eos_token
             if response_str.endswith(eos_token):
-                response_str = response_str[:-len(eos_token)]
+                response_str = response_str[: -len(eos_token)]
             response_strs.append(response_str)
 
-            ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+            ground_truth = data_item.non_tensor_batch["reward_model"]["ground_truth"]
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
-            extra_info = data_item.non_tensor_batch.get('extra_info', None)
+            extra_info = data_item.non_tensor_batch.get("extra_info", None)
 
             data_sources.append(data_source)
             solutions.append(response_str)
@@ -242,18 +266,18 @@ class AsyncDAPORewardManager:
                     extra_infos,
                     num_processes=64,
                     batch_size=self.batch_size,
-                    shuffle=self.shuffle_batch
+                    shuffle=self.shuffle_batch,
                 )
             )
             # print(f"[DEBUG] Parallel score computation completed")
-        except Exception as e:
+        except Exception:
             # print(f"[DEBUG] Error in parallel score computation: {e}")
             # Fallback to zeros if computation fails
             results = [None] * len(solutions)
 
         # Process results
         for i, (result, data_source, response_str, ground_truth, valid_response_length) in enumerate(
-            zip(results, data_sources, response_strs, ground_truths, valid_response_lengths)
+            zip(results, data_sources, response_strs, ground_truths, valid_response_lengths, strict=False)
         ):
             score = 0.0
             if result is None:
@@ -263,7 +287,7 @@ class AsyncDAPORewardManager:
                 if not isinstance(result, dict):
                     # Hack to avoid some rewards don't return a dict
                     result = {"score": result, "acc": result}
-            
+
             score = result["score"]
             # Store the information including original reward
             for key, value in result.items():
@@ -298,7 +322,7 @@ class AsyncDAPORewardManager:
                     for key, value in result.items():
                         print(f"[{key}]", value)
                 else:
-                    print(f"[score]", score)
+                    print("[score]", score)
 
         # print(f"[DEBUG] Final reward_tensor shape: {reward_tensor.shape}")
         # print(f"[DEBUG] Non-zero elements in reward_tensor: {(reward_tensor != 0).sum().item()}")

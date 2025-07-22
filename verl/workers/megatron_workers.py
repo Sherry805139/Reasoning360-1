@@ -52,7 +52,7 @@ from verl.utils.profiler import (
     simple_timer,
 )
 from verl.utils.profiler.performance import reduce_timing
-from verl.utils.torch_functional import broadcast_dict_tensor   # NOTE: added by Reasoning360
+from verl.utils.torch_functional import broadcast_dict_tensor  # NOTE: added by Reasoning360
 from verl.workers.actor.megatron_actor import MegatronPPOActor
 from verl.workers.critic.megatron_critic import MegatronPPOCritic
 from verl.workers.reward_model.megatron.reward_model import MegatronRewardModel
@@ -84,8 +84,8 @@ def megatron_pp_dummy_output(data: DataProto):
     from verl.single_controller.base.decorator import _make_dummy_data_proto
 
     if (
-        mpu.get_pipeline_model_parallel_rank() != mpu.get_pipeline_model_parallel_world_size() - 1   # not the last stage
-        or mpu.get_tensor_model_parallel_rank() != 0    # not the first tensor parallel rank
+        mpu.get_pipeline_model_parallel_rank() != mpu.get_pipeline_model_parallel_world_size() - 1  # not the last stage
+        or mpu.get_tensor_model_parallel_rank() != 0  # not the first tensor parallel rank
     ):
         return _make_dummy_data_proto(data)
     return data
@@ -522,7 +522,9 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         data.batch = data.batch.to(get_device_name())
 
         # NOTE: added by Reasoning360.
-        broadcast_dict_tensor(data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group())
+        broadcast_dict_tensor(
+            data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group()
+        )
 
         micro_batch_size = self.config.actor.ppo_micro_batch_size_per_gpu
         data.meta_info["micro_batch_size"] = micro_batch_size
@@ -553,8 +555,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             log_gpu_memory_usage("After offload actor optimizer during update_actor", logger=logger)
 
         get_torch_device().empty_cache()
-        # NOTE: added by Reasoning360.
-        return megatron_pp_dummy_output(output)
+        return output
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     @GPUMemoryLogger(role="generate_sequences", logger=logger)
@@ -609,7 +610,9 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         data.meta_info["temperature"] = self.config.rollout.temperature
         data = data.to(get_device_id())
         # NOTE: added by Reasoning360.
-        broadcast_dict_tensor(data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group())
+        broadcast_dict_tensor(
+            data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group()
+        )
 
         # NOTE: this function internally broadcasts the last stage's input and output to all ranks.
         output, _ = self.ref_policy.compute_log_prob(data=data, calculate_entropy=False)
@@ -639,7 +642,9 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         data = data.to(get_device_id())
 
         # NOTE: added by Reasoning360.
-        broadcast_dict_tensor(data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group())
+        broadcast_dict_tensor(
+            data.batch, src=mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group()
+        )
 
         output, entropys = self.actor.compute_log_prob(data=data, calculate_entropy=True)
         output = DataProto.from_dict(

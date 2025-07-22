@@ -20,7 +20,7 @@ from .prime import PrimeRewardManager
 
 # Added by Reasoning360
 from .naive_parallel import NaiveParallelRewardManager
-from .async_dapo import AsyncDAPORewardManager
+from .async_mp import AsyncMultiProcessRewardManager
 from .llm_judge import LLMJudgeRewardManager
 
 # Note(haibin.lin): no need to include all reward managers here in case of complicated dependencies
@@ -32,5 +32,7 @@ __all__ = [
     "register",
     "get_reward_manager_cls",
     # Added by Reasoning360
-    "NaiveParallelRewardManager", "AsyncDAPORewardManager", "LLMJudgeRewardManager",
+    "NaiveParallelRewardManager",
+    "AsyncMultiProcessRewardManager",
+    "LLMJudgeRewardManager",
 ]
