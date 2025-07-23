@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=16node-32kgen-aggGradClipping-sft-cliphigher-qwen32b-amthink
+#SBATCH --job-name=16node-32kgen-kkl_loss-sft-cliphigher-qwen32b-amthink
 #SBATCH --partition=main
 #SBATCH --account=iq
 #SBATCH --nodes=16
@@ -15,8 +15,8 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="347414-sft-32kgen-rl-cliphigher-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.216:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+RESUME_CKPT_DIR_NAME="428985-16node-32kgen-kl_loss-sft-cliphigher-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+export STEM_LLM_JUDGE_URL="http://10.24.24.45:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -134,8 +134,8 @@ test_files="['${math_test_path}', \
 '${supergpqa_test_path}']"
 
 # =================== Model ===================
-# BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
-BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-1084
+BASE_MODEL=${SHARED_DATA_PATH}/Qwen2.5-32B-think  # Note: this is Qwen32B-Base model with 'think' system prompt
+# BASE_MODEL=${SHARED_MODEL_PATH}/Qwen2.5-32B-base-AM-thinking-distilled-v1-old/checkpoint-1084
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
@@ -180,8 +180,8 @@ adv_estimator=grpo
 
 use_kl_in_reward=False
 kl_coef=0.0
-use_kl_loss=False
-kl_loss_coef=0.0
+use_kl_loss=True
+kl_loss_coef=0.001
 
 clip_ratio_low=0.2
 clip_ratio_high=0.28
@@ -204,7 +204,8 @@ n_resp_per_prompt=16
 train_prompt_mini_bsz=64  # model grad update batchsize
 
 # Algorithm
-temperature=1.0
+train_temp=1.2
+val_temp=1.0
 top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
@@ -278,12 +279,12 @@ val_before_train=True
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.temperature=${temperature} \
+    actor_rollout_ref.rollout.temperature=${train_temp} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.top_p=${top_p}\
-    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
+    actor_rollout_ref.rollout.val_kwargs.temperature=${val_temp} \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
