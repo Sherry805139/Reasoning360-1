@@ -383,19 +383,37 @@ class DataParallelPPOActor(BasePPOActor):
                     loss_agg_mode = self.config.loss_agg_mode
 
                     # all return: (bsz, response_length)
-                    calculate_entropy = False
-                    if entropy_coeff != 0:
-                        calculate_entropy = True
+                    # TWK NOTE: We want to compute the entropy here to get the filtering mask for low/high entropy tokens. BUT! We do not want to 
+                    #   set entropy_coeff > 0 because it will then kick in the use of the entropy loss term...
+                    calculate_entropy = True
+                    # if entropy_coeff != 0:
+                    #     calculate_entropy = True
                     entropy, log_prob = self._forward_micro_batch(micro_batch=data, temperature=temperature, calculate_entropy=calculate_entropy)
+
+                    # high entropy token mask
+                    high_entropy_mask, low_entropy_mask = None, None
+                    if self.config.get("use_token_entropy_separate", False) or self.config.get("use_token_entropy_filter", False):
+                        with torch.no_grad():
+                            token_entropy_quantile = self.config.get("token_entropy_quantile", 0.8)
+                            masked_entropy = torch.where(response_mask.bool(), entropy.detach(), torch.nan)  # (bsz, response_length)
+                            q_thres = torch.nanquantile(masked_entropy, q=token_entropy_quantile, dim=-1, keepdim=True) # (bsz, 1)
+                            high_entropy_mask = (masked_entropy <= q_thres) & response_mask # Only low entropy token is True
+                            low_entropy_mask = (masked_entropy > q_thres) & response_mask # Only high entropy token is True
 
                     pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_policy_loss(
                         old_log_prob=old_log_prob,
                         log_prob=log_prob,
                         advantages=advantages,
                         response_mask=response_mask,
+                        use_token_entropy_separate=self.config.get("use_token_entropy_separate", False),
+                        use_token_entropy_filter=self.config.get("use_token_entropy_filter", False),
                         cliprange=clip_ratio,
                         cliprange_low=clip_ratio_low,
                         cliprange_high=clip_ratio_high,
+                        low_entropy_clip_ratio_low=self.config.get("low_entropy_clip_ratio_low", clip_ratio_low),
+                        low_entropy_clip_ratio_high=self.config.get("low_entropy_clip_ratio_high", clip_ratio_high),
+                        high_entropy_clip_ratio_low=self.config.get("high_entropy_clip_ratio_low", clip_ratio_low),
+                        high_entropy_clip_ratio_high=self.config.get("high_entropy_clip_ratio_high", clip_ratio_high),
                         clip_ratio_c=clip_ratio_c,
                         loss_agg_mode=loss_agg_mode,
                     )
@@ -412,11 +430,21 @@ class DataParallelPPOActor(BasePPOActor):
                         ref_log_prob = data["ref_log_prob"]
                         # compute kl loss
                         kld = kl_penalty(logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type)
-                        kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+                        if self.config.use_token_entropy_separate:
+                            low_entropy_kl_loss = agg_loss(loss_mat=kld, loss_mask=high_entropy_mask, loss_agg_mode=loss_agg_mode)
+                            high_entropy_kl_loss = agg_loss(loss_mat=kld, loss_mask=low_entropy_mask, loss_agg_mode=loss_agg_mode)
+                            kl_loss = low_entropy_kl_loss + high_entropy_kl_loss
+                            policy_loss = policy_loss + low_entropy_kl_loss * self.config.kl_loss_coef + high_entropy_kl_loss * self.config.high_entropy_kl_loss_scale_coef
+                        else:
+                            kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+                            policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
 
-                        policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
                         metrics["actor/kl_loss"] = kl_loss.detach().item()
                         metrics["actor/kl_coef"] = self.config.kl_loss_coef
+                        if self.config.use_token_entropy_separate:
+                            metrics["actor/low_entropy_kl_loss"] = low_entropy_kl_loss.detach().item()
+                            metrics["actor/high_entropy_kl_loss"] = high_entropy_kl_loss.detach().item()
+                            metrics["actor/high_entropy_kl_loss_scale_coef"] = self.config.high_entropy_kl_loss_scale_coef
 
                     if self.config.use_dynamic_bsz:
                         # relative to the dynamic bsz
@@ -425,11 +453,14 @@ class DataParallelPPOActor(BasePPOActor):
                         loss = policy_loss / self.gradient_accumulation
                     loss.backward()
 
+                    action_reward = verl_F.masked_sum(log_prob, response_mask) / responses.numel()
+
                     data = {
                         "actor/pg_loss": pg_loss.detach().item(),
                         "actor/pg_clipfrac": pg_clipfrac.detach().item(),
                         "actor/ppo_kl": ppo_kl.detach().item(),
                         "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
+                        "actor/action_reward": action_reward.detach().item(),
                     }
                     append_to_dict(metrics, data)
 

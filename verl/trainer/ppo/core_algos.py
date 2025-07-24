@@ -459,9 +459,16 @@ def compute_policy_loss(
     log_prob,
     advantages,
     response_mask,
+    use_token_entropy_separate=False,
+    use_token_entropy_filter=False,
+    high_entropy_mask=None,
     cliprange=None,
     cliprange_low=None,
     cliprange_high=None,
+    low_entropy_clip_ratio_low=None,
+    low_entropy_clip_ratio_high=None,
+    high_entropy_clip_ratio_low=None,
+    high_entropy_clip_ratio_high=None,
     clip_ratio_c=3.0,
     loss_agg_mode: str = "token-mean",
 ):
@@ -494,17 +501,31 @@ def compute_policy_loss(
             Aggregation mode for `agg_loss`. Defaults to "token-mean".
     """
     assert clip_ratio_c > 1.0, "The lower bound of the clip_ratio_c for dual-clip PPO should be greater than 1.0," + f" but get the value: {clip_ratio_c}."
+    # Assert that use_token_entropy_separate and use_token_entropy_filter are not both True
+    assert not (use_token_entropy_separate and use_token_entropy_filter), "use_token_entropy_separate and use_token_entropy_filter cannot be both True."
 
     negative_approx_kl = log_prob - old_log_prob
+    # Clamp negative_approx_kl for stability
+    negative_approx_kl = torch.clamp(negative_approx_kl, min=-20.0, max=20.0)
     ratio = torch.exp(negative_approx_kl)
     ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
 
     pg_losses1 = -advantages * ratio
+
     if cliprange_low is None:
         cliprange_low = cliprange
     if cliprange_high is None:
         cliprange_high = cliprange
-    pg_losses2 = -advantages * torch.clamp(ratio, 1 - cliprange_low, 1 + cliprange_high)  # - clip(ratio, 1-cliprange, 1+cliprange) * A
+    
+    if use_token_entropy_separate:
+        clip_ratio = torch.where(high_entropy_mask.bool(), torch.clam(ratio, 1 - low_entropy_clip_ratio_low, 1 + low_entropy_clip_ratio_high), torch.clamp(ratio, 1 - high_entropy_clip_ratio_low, 1 + high_entropy_clip_ratio_high))
+        pg_losses2 = -advantages * clip_ratio
+    else:
+        pg_losses2 = -advantages * torch.clamp(ratio, 1 - cliprange_low, 1 + cliprange_high)  # - clip(ratio, 1-cliprange, 1+cliprange) * A
+
+    if use_token_entropy_filter:
+        pg_losses2.masked_fill_(high_entropy_mask.bool(), 0.0)  # Set the loss to zero for low entropy tokens
+    
     clip_pg_losses1 = torch.maximum(pg_losses1, pg_losses2)  # max(-ratio * A, -clip(ratio, 1-cliprange, 1+cliprange) * A)
     pg_clipfrac = verl_F.masked_mean(torch.gt(pg_losses2, pg_losses1).float(), response_mask)
 
@@ -595,6 +616,8 @@ def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_pe
     # # URL http://joschu.net/blog/kl-approx.html.
     if kl_penalty in ("low_var_kl", "k3"):
         kl = ref_logprob - logprob
+        # Clamp For numerical stability
+        kl = torch.clamp(kl, min=-20, max=20)
         ratio = torch.exp(kl)
         kld = (ratio - kl - 1).contiguous()
         return torch.clamp(kld, min=-10, max=10)
