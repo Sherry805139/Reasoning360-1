@@ -518,7 +518,7 @@ def compute_policy_loss(
         cliprange_high = cliprange
     
     if use_token_entropy_separate:
-        clip_ratio = torch.where(high_entropy_mask.bool(), torch.clam(ratio, 1 - low_entropy_clip_ratio_low, 1 + low_entropy_clip_ratio_high), torch.clamp(ratio, 1 - high_entropy_clip_ratio_low, 1 + high_entropy_clip_ratio_high))
+        clip_ratio = torch.where(high_entropy_mask.bool(), torch.clamp(ratio, 1 - low_entropy_clip_ratio_low, 1 + low_entropy_clip_ratio_high), torch.clamp(ratio, 1 - high_entropy_clip_ratio_low, 1 + high_entropy_clip_ratio_high))
         pg_losses2 = -advantages * clip_ratio
     else:
         pg_losses2 = -advantages * torch.clamp(ratio, 1 - cliprange_low, 1 + cliprange_high)  # - clip(ratio, 1-cliprange, 1+cliprange) * A
