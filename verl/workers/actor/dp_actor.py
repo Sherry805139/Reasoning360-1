@@ -407,6 +407,7 @@ class DataParallelPPOActor(BasePPOActor):
                         response_mask=response_mask,
                         use_token_entropy_separate=self.config.get("use_token_entropy_separate", False),
                         use_token_entropy_filter=self.config.get("use_token_entropy_filter", False),
+                        high_entropy_mask=high_entropy_mask,
                         cliprange=clip_ratio,
                         cliprange_low=clip_ratio_low,
                         cliprange_high=clip_ratio_high,

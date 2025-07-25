@@ -308,13 +308,15 @@ class RayDAPOTrainer(RayPPOTrainer):
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
                         # update actor
-                        train_batch_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages"]
-                        if self.global_steps <= 1:
-                            print(f"removing keys {set(batch.batch.keys()) - set(train_batch_keys)} for training.", flush=True)
-                        train_batch = batch.select(batch_keys=train_batch_keys, non_tensor_batch_keys=set())
                         with _timer("update_actor", timing_raw):
-                            train_batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
-                            actor_output = self.actor_rollout_wg.update_actor(train_batch)
+                            actor_output = self.actor_rollout_wg.update_actor(batch)
+                        # train_batch_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages"]
+                        # if self.global_steps <= 1:
+                        #     print(f"removing keys {set(batch.batch.keys()) - set(train_batch_keys)} for training.", flush=True)
+                        # train_batch = batch.select(batch_keys=train_batch_keys, non_tensor_batch_keys=set())
+                        # with _timer("update_actor", timing_raw):
+                        #     train_batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
+                        #     actor_output = self.actor_rollout_wg.update_actor(train_batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 
