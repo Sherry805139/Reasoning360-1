@@ -16,7 +16,6 @@ import json
 import logging
 import os
 import random
-from typing import Optional
 from collections.abc import Callable
 from dataclasses import asdict
 
@@ -224,7 +223,7 @@ class MegatronCheckpointManager(BaseCheckpointManager):
             common_path = common_path + f"_{expert_rank:03d}"
 
         # NOTE: Added by Reasoning360: replace os.makedirs by local_mkdir
-        self.local_mkdir(common_path)
+        local_mkdir_safe(common_path)
 
         if return_base_dir:
             return common_path
@@ -376,19 +375,6 @@ class MegatronCheckpointManager(BaseCheckpointManager):
             keep_start = len(self.previous_saved_paths) - max_ckpt_to_keep + 1
             self.remove_previous_save_local_path(self.previous_saved_paths[:keep_start])
             self.previous_saved_paths = self.previous_saved_paths[keep_start:]
-
-        if self.rank == 0:
-            # NOTE: bug fix by Reasoning360: avoid multiple nodes creating the same directory
-            local_path = self.local_mkdir(local_path)
-            if "model" in self.checkpoint_contents:
-                hf_ckpt_path = get_hf_model_checkpoint_path(local_path)
-                hf_ckpt_path = self.local_mkdir(hf_ckpt_path)
-            # if "optimizer" in self.checkpoint_contents:
-            #     optimizer_path = os.path.join(local_path, "optim")
-            #     optimizer_path = self.local_mkdir(optimizer_path)
-            # if "extra" in self.checkpoint_contents:
-            #     rng_state_path = os.path.join(local_path, "rng_states")
-            #     rng_state_path = self.local_mkdir(rng_state_path)
 
         local_path = local_mkdir_safe(local_path)
         dist_checkpoint_path = get_dist_checkpoint_path(local_path)
