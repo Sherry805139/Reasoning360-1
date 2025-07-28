@@ -105,10 +105,10 @@ def default_compute_score(data_source, solution_str, ground_truth, extra_info=No
     elif data_source in ["reasoning_gym"]:
         from . import reasoning_gym
         res = reasoning_gym.compute_score(solution_str, ground_truth, extra_info=extra_info)
+
     # NOTE: above is added by Reasoning360
     elif data_source == "openai/gsm8k":
         from . import gsm8k
-
         res = gsm8k.compute_score(solution_str, ground_truth)
     elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval"]:
         from . import math
