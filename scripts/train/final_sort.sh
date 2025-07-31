@@ -15,7 +15,7 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME="/mnt/sharefs/users/haonan.li/Reasoning360/checkpoints/Difficulty-Aware-RL/final-sort-DeepSeek-R1-Distill-Qwen-7B-434167"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
 export STEM_LLM_JUDGE_URL="http://10.24.2.80:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================

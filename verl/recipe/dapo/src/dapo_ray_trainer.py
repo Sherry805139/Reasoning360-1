@@ -58,15 +58,15 @@ class RayDAPOTrainer(RayPPOTrainer):
         from torchdata.stateful_dataloader import StatefulDataLoader
         
         # Initialize columns for the first epoch
+        max_easy_ratio = self.config.data.get("max_easy_ratio", 0.1)
+        max_hard_ratio = self.config.data.get("max_hard_ratio", 0.2)
         if epoch_idx == 0: 
             # Get the initial pass rate column name from config, with default fallback
             initial_pass_rate_column = self.config.data.get("initial_pass_rate_column", "qwen3_30b_pass_rate")
             self.train_dataset.dataframe["prev_pass_rate"] = self.train_dataset.dataframe[initial_pass_rate_column]
             # use half of the max response length as the average length for the first epoch
-            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) / 2 
-            self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) / 2
-            self.n_drop_easy = 0
-            self.n_drop_hard = 0
+            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4 
+            self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4
 
         
         original_df = self.train_dataset.dataframe.copy()
@@ -90,7 +90,7 @@ class RayDAPOTrainer(RayPPOTrainer):
             self.n_drop_easy = 0
             if perfect_indices:
                 np.random.seed(42 + epoch_idx)
-                n_keep_perfect = max(1, min(n_medium // 10, len(perfect_indices)))
+                n_keep_perfect = int(max(1, min(n_medium * max_easy_ratio, len(perfect_indices))))
                 if n_keep_perfect > 0:
                     kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
                     kept_indices.update(kept_perfect)
@@ -100,7 +100,7 @@ class RayDAPOTrainer(RayPPOTrainer):
             self.n_drop_hard = 0
             if failed_indices:
                 np.random.seed(43 + epoch_idx)
-                n_keep_failed = max(1, min(n_medium // 5, len(failed_indices)))
+                n_keep_failed = int(max(1, min(n_medium * max_hard_ratio, len(failed_indices))))
                 if n_keep_failed > 0:
                     kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
                     kept_indices.update(kept_failed)
@@ -128,14 +128,18 @@ class RayDAPOTrainer(RayPPOTrainer):
             passed_prompt_avg_length = row['prev_passed_avg_length']
             passed_prompt_max_length = row['prev_passed_max_length']
             
+            # Get configurable multipliers with default values
+            perfect_pass_rate_multiplier = self.config.data.get("perfect_pass_rate_multiplier", 1.0)
+            high_pass_rate_multiplier = self.config.data.get("high_pass_rate_multiplier", 0.8)
+            
             if prompt_pass_rate == 1.0:
-                new_length_budget = passed_prompt_max_length
+                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
             elif prompt_pass_rate > pass_rate_upper_bound:
-                new_length_budget = max(0.8 * passed_prompt_max_length, passed_prompt_avg_length)
+                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
             else:
                 new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
             
-            new_length_budget = max(new_length_budget, 2000)  # Set minimum to 2000
+            new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
             new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
             
             return int(new_length_budget)
@@ -571,7 +575,7 @@ class RayDAPOTrainer(RayPPOTrainer):
 
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
-                metrics.update(compute_difficulty_histogram_metrics(batch=batch, config=self.config))
+                #metrics.update(compute_difficulty_histogram_metrics(batch=batch, config=self.config))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()

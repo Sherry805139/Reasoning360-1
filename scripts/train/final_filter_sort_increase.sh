@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=final-filter-sort-decrease
+#SBATCH --job-name=final-filter-sort-increase
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -15,7 +15,7 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="/mnt/sharefs/users/haonan.li/Reasoning360/checkpoints/Difficulty-Aware-RL/final-filter-sort-decrease-DeepSeek-R1-Distill-Qwen-7B-434166"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
 export STEM_LLM_JUDGE_URL="http://10.24.2.80:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -272,5 +272,7 @@ offload=True
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.enable_budget=True \
     +data.dynamic_filtering=True \
-    +data.pass_rate_upper_bound=0.8 \
+    +data.pass_rate_upper_bound=1 \
+    +data.perfect_pass_rate_multiplier=1.2 \
+    +data.high_pass_rate_multiplier=1.2 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate

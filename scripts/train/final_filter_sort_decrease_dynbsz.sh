@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=final-filter-sort-decrease
+#SBATCH --job-name=final-filter-sort-decrease-dynbsz
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -15,7 +15,7 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="/mnt/sharefs/users/haonan.li/Reasoning360/checkpoints/Difficulty-Aware-RL/final-filter-sort-decrease-DeepSeek-R1-Distill-Qwen-7B-434166"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
 export STEM_LLM_JUDGE_URL="http://10.24.2.80:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -180,7 +180,7 @@ sp_size=1
 gen_tp=4
 infer_micro_batch_size=256
 train_micro_batch_size=32
-use_dynamic_bsz=False
+use_dynamic_bsz=True
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
 offload=True
@@ -272,5 +272,5 @@ offload=True
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.enable_budget=True \
     +data.dynamic_filtering=True \
-    +data.pass_rate_upper_bound=0.8 \
+    +data.pass_rate_upper_bound=1 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate
