@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=server_llm_as_verifier
 #SBATCH --partition=main
+#SBATCH --account=iq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64

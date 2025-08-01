@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=16node-32kgen-archer-qwen32b-amthink
+#SBATCH --job-name=archer-16node-32kgen-qwen32b-amthink
 #SBATCH --partition=main
 #SBATCH --account=iq
 #SBATCH --nodes=16
@@ -15,8 +15,8 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.24.45:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+RESUME_CKPT_DIR_NAME="473379-16node-32kgen-archer-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+export STEM_LLM_JUDGE_URL="http://10.24.1.41:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
