@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=newverl_megatron_tp8_pp2_cp8_gentp4_util0.7_token8k_lr5e7
+#SBATCH --job-name=example-multinode-rl-llama3.1-70b-distill-megatron
 #SBATCH --nodes=32
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=1
