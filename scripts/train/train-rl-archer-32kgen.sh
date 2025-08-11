@@ -16,7 +16,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME="473379-16node-32kgen-archer-qwen32b-amthink"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.41:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="http://10.24.2.1:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
