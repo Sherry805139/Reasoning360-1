@@ -158,3 +158,4 @@ artifacts/
 
 # Analysis
 analysis/
+wandb/
