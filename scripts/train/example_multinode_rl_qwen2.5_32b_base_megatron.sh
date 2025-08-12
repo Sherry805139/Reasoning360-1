@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=example-multinode-rl-llama3.1-70b-distill-megatron
-#SBATCH --nodes=32
-#SBATCH --ntasks=32
+#SBATCH --job-name=example-multinode-rl-qwen2.5-32b-base-megatron
+#SBATCH --nodes=8
+#SBATCH --ntasks=8
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
-#SBATCH --cpus-per-task=128
+#SBATCH --cpus-per-task=96
 #SBATCH --mem=0
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
@@ -13,10 +13,10 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME=""
-export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
-# =================== Environment ===================
+# =================== Cluster Environment ===================
 export NCCL_DEBUG=info
 export NCCL_ALGO=NVLSTree
 export NCCL_IBEXT_DISABLE=1
@@ -26,14 +26,12 @@ export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export CUDA_LAUNCH_BLOCKING=1
 
-
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
 echo "Nodes to check: ${nodes[@]}"
 
 # We'll track PIDs so we can wait on them and detect errors
 declare -A pids
-
 export head_node=${nodes[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 port=6379
@@ -42,9 +40,6 @@ address_head=$head_node_ip:$port
 export worker_num=$SLURM_NNODES
 export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=0
-export RAY_record_ref_creation_sites=1  # NOTE(yonghao): DEBUG code
-# export GLOO_SOCKET_IFNAME=ens10f0np0
-
 
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=./data
@@ -102,7 +97,7 @@ train_files="['${math_train_path}']"  # Use math as example, add to more tasks a
 test_files="['${math_test_path}','${aime_test_path}']"  # Use math as example, add to more tasks as needed
 
 # =================== Model ===================
-BASE_MODEL="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
+BASE_MODEL=Qwen/Qwen2.5-32B
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
@@ -152,7 +147,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 32))
+max_response_length=$((1024 * 8))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -161,11 +156,11 @@ loss_agg_mode="token-mean"
 
 enable_filter_groups=False
 filter_groups_metric=acc
-max_num_gen_batches=16
-train_prompt_bsz=256  # grad accum bsz; real grad accum bsz: train_prompt_bsz * rollout.n
+max_num_gen_batches=10
+train_prompt_bsz=512  # grad accum bsz; real grad accum bsz: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))  # rollout bsz, i.e., the x-axis in RL plot
 n_resp_per_prompt=16
-train_prompt_mini_bsz=8
+train_prompt_mini_bsz=64
 
 # Algorithm
 temperature=1.0
@@ -173,24 +168,24 @@ top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Generation config
-gen_tp=4
+gen_tp=2
 gen_max_num_seqs=1024
 
 # Megatron trainer config
 train_tp=8
-train_pp=2
-sp_size=8
+train_pp=1
+sp_size=2
 offload=True
 
 # Batch size
 use_dynamic_bsz=True
 train_micro_batch_size=null
 train_micro_batch_size_per_gpu_placeholder=1  # can't be null, as in ray_trainer.py ```minimal_bsz = megatron_dp * config.actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu```
-infer_micro_batch_size_per_gpu_placeholder=8  # can't be null, as in megatron_worker.py ```assert self.config.ref.get("log_prob_micro_batch_size_per_gpu", None) is not None, "Please note that in the ref policy configuration, `log_prob_micro_batch_size_per_gpu` and `log_prob_micro_batch_size` should not be None at the same time."```
+infer_micro_batch_size_per_gpu_placeholder=1  # can't be null, as in megatron_worker.py ```assert self.config.ref.get("log_prob_micro_batch_size_per_gpu", None) is not None, "Please note that in the ref policy configuration, `log_prob_micro_batch_size_per_gpu` and `log_prob_micro_batch_size` should not be None at the same time."```
 # NOTE: this one is for per gpu, so it times sp_size (defined later)
 # actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1 ))
-actor_ppo_max_token_len=8192
-infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1 ))
+actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2 ))
+infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2 ))
 
 
 # NOTE(yonghao): all other parts (weights, optimizer states) exists across stages (training, generation)
@@ -253,7 +248,7 @@ grad_offload=True
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.65 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${infer_micro_batch_size_per_gpu_placeholder} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
@@ -269,6 +264,8 @@ grad_offload=True
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
     +actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.rollout.multi_turn.enable=False \
+    actor_rollout_ref.rollout.mode="sync" \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
@@ -280,10 +277,10 @@ grad_offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=False \
+    trainer.log_val_generations=50 \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=-1 \
+    trainer.save_freq=10 \
     trainer.test_freq=10 \
     trainer.total_epochs=5 \
     trainer.log_val_generations=50 \
