@@ -41,8 +41,11 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "INFO"))
 
 @dataclass
 class FSDPConfig:
-    """
-    Configuration for FSDP checkpointing.
+    """Configuration for FSDP checkpointing.
+
+    Args:
+        FSDP_version (int): Version of FSDP being used.
+        world_size (int): Number of processes in the distributed training setup.
     """
 
     FSDP_version: int
@@ -210,12 +213,9 @@ class FSDPCheckpointManager(BaseCheckpointManager):
             self.remove_previous_save_local_path(self.previous_saved_paths[:keep_start])
             self.previous_saved_paths = self.previous_saved_paths[keep_start:]
 
-        if self.rank == 0:  # added by Reasoning360: file system got problem on rank0 when co-current making dirs, so we make dirs on rank0 only
-            local_path = self.local_mkdir(local_path)
-
+        # if self.rank == 0:  # added by Reasoning360: file system got problem on rank0 when co-current making dirs, so we make dirs on rank0 only
         local_path = local_mkdir_safe(local_path)
         torch.distributed.barrier()
-        local_path = self.local_mkdir(local_path)  # hack fix: to get the local path for non-rank0
 
         # check if the checkpoint_save_contents is valid
         if self.should_save_model:
@@ -266,13 +266,16 @@ class FSDPCheckpointManager(BaseCheckpointManager):
             hf_config_tokenizer_path = os.path.join(local_path, "huggingface")
             local_mkdir_safe(hf_config_tokenizer_path)
             model_config = unwrap_model.config
+            generation_config = None
             if unwrap_model.can_generate() and hasattr(model_config, "name_or_path") and model_config.name_or_path:
-                # Some model's name_or_path is empty if not initialized from pretrained,
-                # in this cases, we don't save generation config.
-                generation_config = GenerationConfig.from_pretrained(model_config.name_or_path)
-                generation_config.save_pretrained(hf_config_tokenizer_path)
-            else:
-                generation_config = None
+                try:
+                    # Some model's name_or_path is empty if not initialized from pretrained,
+                    # in this cases, we don't save generation config.
+                    generation_config = GenerationConfig.from_pretrained(model_config.name_or_path)
+                    generation_config.save_pretrained(hf_config_tokenizer_path)
+                except Exception:
+                    # if the generation config isn't available, we don't save it
+                    pass
 
             model_config.save_pretrained(hf_config_tokenizer_path)
             self.processing_class.save_pretrained(hf_config_tokenizer_path)

@@ -49,7 +49,7 @@ $$
 - **Generation batch size(`data.train_prompt_bsz`)**: This is the number of unique prompts sent to the vLLM engine for generation in a single batch. This is distinct from the training mini-batch size. A larger generation batch size can increase throughput by better utilizing the GPU and reducing the times of switch of rollout and train phases, but introduces the risk of “off-policy” if your training doesn’t support large enough mini-batch size (`actor.ppo_mini_batch_size`).
 - **Tensor parallel(`rollout.tensor_model_parallel_size`)**: Similar to training, this shards the model's weights across multiple GPUs to serve models that are too large for a single GPU. For inference, TP is crucial for both fitting the model in memory and for increasing throughput.
 - **KV cache(`rollout.gpu_memory_utilization`)**: The Key-Value (KV) cache is crucial for faster inference and the primary memory consumer during LLM inference. It stores the key and value states for all previously generated tokens in a sequence to prevent costly recomputation. `gpu_memory_utilization` in vLLM controls the fraction of GPU memory pre-allocated for the KV cache. A higher value (e.g., 0.90) allows vLLM to handle more concurrent requests and/or longer sequences efficiently, but leaves less memory for other processes.
-- **Max token length per GPU(`infer_ppo_max_token_len`)**: Max tokens to be processed in the forward computation. Similar to `actor.ppo_max_token_len_per_gpu` in training.
+- **Max token length per GPU(`infer_ppo_max_token_len`)**: Max tokens to be processed in the forward computation. Similar to `actor.ppo_max_token_len_per_gpu` in training. Increasing it will increase token throughput, but also increasing the GPU memory.
 
 ## 4. Case Studies
 
