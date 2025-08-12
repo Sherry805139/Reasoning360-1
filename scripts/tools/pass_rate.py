@@ -187,24 +187,24 @@ def process_parquet_file(file_path: str, output_path: str, args, reward_pool: Op
         
         ground_truth = reward_model_data.get("ground_truth", "")
         
-        # Handle different ground_truth formats
-        if ground_truth is None:
-            skipped["no_ground_truth"] += 1
-            continue
-        elif isinstance(ground_truth, str) and not ground_truth:
-            skipped["no_ground_truth"] += 1
-            continue
-        elif isinstance(ground_truth, list) or (isinstance(ground_truth, np.ndarray) and ground_truth.ndim > 0):
-            if len(ground_truth) == 0:
-                skipped["no_ground_truth"] += 1
-                continue
-            # Convert ndarray to list while keeping original shape
-            if isinstance(ground_truth, np.ndarray):
-                ground_truth = ground_truth.tolist()
-        elif isinstance(ground_truth, np.ndarray) and ground_truth.ndim == 0:
-            # Handle numpy scalars (0-dimensional arrays)
-            ground_truth = ground_truth.item()
-        # For other types (int, float, etc.), use as-is
+        # # Handle different ground_truth formats
+        # if ground_truth is None:
+        #     skipped["no_ground_truth"] += 1
+        #     continue
+        # elif isinstance(ground_truth, str) and not ground_truth:
+        #     skipped["no_ground_truth"] += 1
+        #     continue
+        # elif isinstance(ground_truth, list) or (isinstance(ground_truth, np.ndarray) and ground_truth.ndim > 0):
+        #     if len(ground_truth) == 0:
+        #         skipped["no_ground_truth"] += 1
+        #         continue
+        #     # Convert ndarray to list while keeping original shape
+        #     if isinstance(ground_truth, np.ndarray):
+        #         ground_truth = ground_truth.tolist()
+        # elif isinstance(ground_truth, np.ndarray) and ground_truth.ndim == 0:
+        #     # Handle numpy scalars (0-dimensional arrays)
+        #     ground_truth = ground_truth.item()
+        # # For other types (int, float, etc.), use as-is
         
         # Get data source and extra info
         data_source = df.iloc[i].get("data_source", df.iloc[i].get("source", "unknown"))
