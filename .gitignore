@@ -159,3 +159,4 @@ artifacts/
 # Analysis
 analysis/
 wandb/
+outputs/
