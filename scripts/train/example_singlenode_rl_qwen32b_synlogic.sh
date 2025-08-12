@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=Qwen2-32B_synlogic
+#SBATCH --job-name=Qwen3-32B_synlogic
 #SBATCH --nodes=8
 #SBATCH --ntasks=8
 #SBATCH --ntasks-per-node=1
@@ -103,7 +103,8 @@ test_files="['${synlogic_test_path}']"  # Use math as example, add to more tasks
 # =================== Model ===================
 # BASE_MODEL=Qwen/Qwen2.5-32B  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
 # BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
-BASE_MODEL=Qwen/Qwen2.5-32B-Instruct
+# BASE_MODEL=Qwen/Qwen2.5-32B-Instruct
+BASE_MODEL=Qwen/Qwen3-32B
 # BASE_MODEL=Qwen/Qwen3-4B-Thinking-2507
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360
@@ -165,10 +166,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=128  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=16
-train_prompt_mini_bsz=64  # model grad update batchsize
+train_prompt_mini_bsz=16  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
@@ -177,7 +178,7 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Mathematically equivalent
 sp_size=4
-gen_tp=4
+gen_tp=1
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
