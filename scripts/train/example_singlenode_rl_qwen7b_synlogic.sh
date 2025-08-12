@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=Qwen2-7B-maze
+#SBATCH --job-name=Qwen2-7B-OC
 #SBATCH --nodes=2
 #SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
@@ -44,8 +44,8 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/test
 
 # synlogic
-synlogic_train_path=${TRAIN_DATA_DIR}/synlogic_arrow_maze_train.parquet
-synlogic_test_path=${TEST_DATA_DIR}/synlogic_arrow_maze_test.parquet
+synlogic_train_path=${TRAIN_DATA_DIR}/synlogic_object_counting_train.parquet
+synlogic_test_path=${TEST_DATA_DIR}/synlogic_object_counting_test.parquet
 
 # Math (train)
 math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet

@@ -11,6 +11,11 @@ class ObjectCountingVerifier(Verifier):
         try:
             ground_truth = int(data.answer)
             parsed_answer = self.extract_answer(test_answer)
+            with open("solution_str_OC.txt", "a") as f:
+                    f.write("data.answer: " + data.answer + '\n')
+                    f.write("test_answer: " + test_answer + '\n')
+                    f.write("parsed_answer" + parsed_answer + '\n')
+                    f.write('-'*32 + '\n')
             
             if parsed_answer is None:
                 return False

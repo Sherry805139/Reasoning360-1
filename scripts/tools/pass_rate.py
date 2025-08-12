@@ -153,7 +153,7 @@ def process_parquet_file(file_path: str, output_path: str, args, reward_pool: Op
     # Track skipped items
     skipped = {"existing_scores": 0, "no_responses": 0, "no_ground_truth": 0}
     processed_rows = 0
-    
+    print('len(df)', len(df))
     for i in range(len(df)):
         # Skip if already has scores and not recalculating
         current_scores = df.iloc[i].get("scores")
@@ -224,6 +224,7 @@ def process_parquet_file(file_path: str, output_path: str, args, reward_pool: Op
             gid += 1
     
     if not tasks:
+        print(skipped)
         print(f"No tasks to process in {os.path.basename(file_path)}")
         return 0, 0.0
     

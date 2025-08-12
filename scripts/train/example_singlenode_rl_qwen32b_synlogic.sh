@@ -166,10 +166,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=128  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=16
-train_prompt_mini_bsz=16  # model grad update batchsize
+train_prompt_mini_bsz=4  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
