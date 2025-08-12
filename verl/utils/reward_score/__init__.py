@@ -168,7 +168,7 @@ def default_compute_score(data_source, solution_str, ground_truth, extra_info=No
         #     f.write("form_solution: " + form_solution + '\n')
         #     f.write('-'*32 + '\n')
         data = Data.from_json_str(extra_info["game_data_str"])
-        verifier = verifier_classes[data_source.lstrip("synlogic_")]()
+        verifier = verifier_classes[data_source.replace("synlogic_", "")]()
         res = verifier.verify(data, form_solution)
         if res:
             res = 1.0

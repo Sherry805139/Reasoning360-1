@@ -158,3 +158,6 @@ artifacts/
 
 # Analysis
 analysis/
+wandb/
+outputs/
+slurm/
