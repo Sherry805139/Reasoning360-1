@@ -190,7 +190,12 @@ class vLLMRollout(BaseRollout):
             if hasattr(SamplingParams(), str(k)):
                 kwargs[k] = config.get(k)
 
-        print(f"kwargs: {kwargs}")
+        print(f"kwargs by 360 (SPMD): {kwargs}")
+
+        # Preserve the n value for deterministic expansion (needed for both paths)
+        n_samples = kwargs.get('n', 1)
+
+        # users can customize different sampling_params at different run
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
@@ -297,44 +302,141 @@ class vLLMRollout(BaseRollout):
         # NOTE: added by Reasoning360
         if "num_samples" in prompts.meta_info:
             kwargs["n"] = prompts.meta_info["num_samples"]
-
+            
+        # Preserve the n value for deterministic expansion (needed for both paths)
+        n_samples = kwargs.get('n', 1)
+            
+        # Check for individual response lengths in non_tensor_batch
+        individual_sampling_params = None
+        per_prompt_length_budget = None
+        if "per_prompt_length_budget" in prompts.non_tensor_batch:
+            response_length = prompts.non_tensor_batch["per_prompt_length_budget"]
+            
+            # Convert to list if it's a numpy array
+            if isinstance(response_length, np.ndarray):
+                response_length = response_length.tolist()
+            
+            # Ensure we have the right number for this worker's batch
+            if len(response_length) != batch_size:
+                # The framework distributes data across workers, so we may get a subset
+                # Take the first batch_size elements (assumes ordered distribution)
+                response_length = response_length[:batch_size] if len(response_length) > batch_size else response_length
+                print(f"vLLM rollout (SPMD): Using {len(response_length)} response lengths for batch_size {batch_size}")
+            
+            # Set flag to use individual context manager approach
+            individual_sampling_params = True
+            per_prompt_length_budget = response_length
+            print(f"vLLM rollout (SPMD): Using individual response lengths (range: {min(response_length)}-{max(response_length)})")
+        
+        # Check for single response_length override in meta_info (backward compatibility)
+        elif "response_length" in prompts.meta_info:
+            response_length = prompts.meta_info["response_length"]
+            # meta_info should only contain single values, not lists
+            kwargs["max_tokens"] = response_length
+            print(f"vLLM rollout (SPMD): Overriding max_tokens to {response_length}")
+        
         # users can customize different sampling_params at different run
-        with self.update_sampling_params(**kwargs), self.timer() as t:
-            outputs = self.inference_engine.generate(
-                prompts=vllm_inputs,  # because we have already convert it to prompt token id
-                sampling_params=self.sampling_params,
-                lora_request=lora_requests,
-                use_tqdm=False,
-            )
+        if individual_sampling_params is not None:
+            # Use context manager approach to create individual sampling params while maintaining batch efficiency
+            individual_sampling_params_list = []
+            
+            # Create individual sampling params using context manager approach (no rollback needed since we're not calling generate)
+            for length in response_length:
+                # Create kwargs for this specific prompt
+                individual_kwargs = kwargs.copy()
+                individual_kwargs["max_tokens"] = int(length)
+                
+                # Temporarily create a modified sampling params using the same logic as update_sampling_params
+                # Save current state
+                old_sampling_params_args = {}
+                for key, value in individual_kwargs.items():
+                    if hasattr(self.sampling_params, key):
+                        old_value = getattr(self.sampling_params, key)
+                        old_sampling_params_args[key] = old_value
+                        setattr(self.sampling_params, key, value)
+                
+                # Create a copy with current state (same as what update_sampling_params would use)
+                import copy
+                individual_sampling_param = copy.deepcopy(self.sampling_params)
+                individual_sampling_params_list.append(individual_sampling_param)
+                
+                # Restore original state
+                for key, value in old_sampling_params_args.items():
+                    setattr(self.sampling_params, key, value)
+            
+            # Now do batch inference with all prompts and individual sampling params
+            with self.timer() as t:
+                outputs = self.inference_engine.generate(
+                    prompts=vllm_inputs,
+                    sampling_params=individual_sampling_params_list,
+                    lora_request=lora_requests,
+                    use_tqdm=False,
+                )
+        else:
+            # Use single sampling params for all prompts (original behavior)
+            with self.update_sampling_params(**kwargs), self.timer() as t:
+                outputs = self.inference_engine.generate(
+                    prompts=vllm_inputs,  # because we have already convert it to prompt token id
+                    sampling_params=self.sampling_params,
+                    lora_request=lora_requests,
+                    use_tqdm=False,
+                )
 
-            # TODO(sgm): disable logprob when recompute_log_prob is enable
-            # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
+        # TODO(sgm): disable logprob when recompute_log_prob is enable
+        # if n = 1: (bs, response_length) ; if n > 1: (bs * n, response_length)
 
-            response = []
-            rollout_log_probs = []
-            for output in outputs:
-                for sample_id in range(len(output.outputs)):
-                    response_ids = output.outputs[sample_id].token_ids
-                    response.append(response_ids)
-                    curr_log_prob = []
-                    for i, logprob in enumerate(output.outputs[sample_id].logprobs):
-                        curr_log_prob.append(logprob[response_ids[i]].logprob)
-                    rollout_log_probs.append(curr_log_prob)
+        response = []
+        rollout_log_probs = []
+        for output in outputs:
+            for sample_id in range(len(output.outputs)):
+                response_ids = output.outputs[sample_id].token_ids
+                response.append(response_ids)
+                curr_log_prob = []
+                for i, logprob in enumerate(output.outputs[sample_id].logprobs):
+                    curr_log_prob.append(logprob[response_ids[i]].logprob)
+                rollout_log_probs.append(curr_log_prob)
 
-            response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
-            rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
-            rollout_log_probs = rollout_log_probs.to(torch.float32)
+        response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
+        rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
+        rollout_log_probs = rollout_log_probs.to(torch.float32)
 
-            if self.sampling_params.n > 1 and do_sample:
-                idx = _repeat_interleave(idx, self.sampling_params.n)
-                attention_mask = _repeat_interleave(attention_mask, self.sampling_params.n)
-                position_ids = _repeat_interleave(position_ids, self.sampling_params.n)
-                batch_size = batch_size * self.sampling_params.n
-                # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
-                if "tools_kwargs" in non_tensor_batch.keys():
-                    non_tensor_batch["tools_kwargs"] = _repeat_interleave(non_tensor_batch["tools_kwargs"], self.sampling_params.n)
+        # Check if vLLM has already expanded the batch due to n > 1
+        response_batch_size = response.size(0)
+        original_batch_size = batch_size
+        
+        # If response tensor is already expanded (response_batch_size > original_batch_size), 
+        # then vLLM has handled the expansion internally
+        vllm_already_expanded = response_batch_size > original_batch_size
+        
+        # Original deterministic approach: utilize sampling params for tensor expansion
+        # n_samples is the same whether we use individual sampling params or not
+        if n_samples > 1 and do_sample and not vllm_already_expanded:
+            # Only expand if vLLM hasn't already done it
+            idx = _repeat_interleave(idx, n_samples)
+            attention_mask = _repeat_interleave(attention_mask, n_samples)
+            position_ids = _repeat_interleave(position_ids, n_samples)
+            batch_size = batch_size * n_samples
+            # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
+            # NOTE: Fix batch size mismatch by expanding ALL non_tensor_batch items
+            expanded_non_tensor_batch = {}
+            for key, val in non_tensor_batch.items():
+                expanded_non_tensor_batch[key] = _repeat_interleave(val, n_samples)
+            non_tensor_batch = expanded_non_tensor_batch
+        elif vllm_already_expanded:
+            # vLLM has already expanded, so we need to expand the prompt tensors to match
+            expansion_factor = response_batch_size // original_batch_size
+            idx = _repeat_interleave(idx, expansion_factor)
+            attention_mask = _repeat_interleave(attention_mask, expansion_factor)
+            position_ids = _repeat_interleave(position_ids, expansion_factor)
+            batch_size = response_batch_size
+            # NOTE(linjunrong): for multi-turn https://github.com/volcengine/verl/pull/1037
+            # NOTE: Fix batch size mismatch by expanding ALL non_tensor_batch items
+            expanded_non_tensor_batch = {}
+            for key, val in non_tensor_batch.items():
+                expanded_non_tensor_batch[key] = _repeat_interleave(val, expansion_factor)
+            non_tensor_batch = expanded_non_tensor_batch
 
-            seq = torch.cat([idx, response], dim=-1)
+        seq = torch.cat([idx, response], dim=-1)
 
         response_length = response.size(1)
         delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
@@ -351,13 +453,6 @@ class vLLMRollout(BaseRollout):
         response_attention_mask = get_response_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
 
-        # NOTE: added by Reasoning360. temporarily disabled to avoid messy logging
-        # tokens_per_second = torch.sum(response_attention_mask).item() / t()
-        # print(
-        #     f'Tokens per second: {tokens_per_second} t/s on device {os.environ["CUDA_VISIBLE_DEVICES"]} on host {os.uname().nodename}',
-        #     flush=True,
-        # )
-
         # all the tp ranks should contain the same data here. data in all ranks are valid
         batch = TensorDict(
             {
@@ -371,6 +466,13 @@ class vLLMRollout(BaseRollout):
             batch_size=batch_size,
         )
 
+        # Prepare meta_info for the returned DataProto
+        meta_info = prompts.meta_info.copy()
+        
+        # Set target_max_response_length for backward compatibility
+        if per_prompt_length_budget is None:
+            meta_info["target_max_response_length"] = self.config.response_length
+
         # free vllm cache engine
         if (
             vllm_version
@@ -382,7 +484,7 @@ class vLLMRollout(BaseRollout):
         ):
             self.inference_engine.free_cache_engine()
 
-        return DataProto(batch=batch, non_tensor_batch=non_tensor_batch)
+        return DataProto(batch=batch, non_tensor_batch=non_tensor_batch, meta_info=meta_info)
 
 
 class vLLMAsyncRollout:

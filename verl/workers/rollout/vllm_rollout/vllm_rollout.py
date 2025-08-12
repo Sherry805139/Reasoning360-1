@@ -158,7 +158,7 @@ class vLLMRollout(BaseRollout):
             if hasattr(SamplingParams(), str(k)):
                 kwargs[k] = config.get(k)
 
-        print(f"kwargs: {kwargs}")
+        print(f"kwargs by 360: {kwargs}")
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
@@ -234,6 +234,13 @@ class vLLMRollout(BaseRollout):
         # NOTE: added by Reasoning360, modify sampling params for batches too small
         if "num_samples" in prompts.meta_info:
             kwargs["n"] = prompts.meta_info["num_samples"]
+
+        # Check for response_length override in meta_info (like HF rollout does)
+        if "response_length" in prompts.meta_info:
+            response_length = prompts.meta_info["response_length"]
+            kwargs["max_tokens"] = response_length
+            print(f"vLLM rollout: Overriding max_tokens to meta_info ({response_length})")
+        print(f"kwargs: {kwargs}")
 
         lora_requests = None
         if self.lora_kwargs:

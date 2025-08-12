@@ -17,6 +17,8 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 
 import hydra
 import ray
+import uuid
+import hashlib
 
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 from verl.trainer.ppo.reward import load_reward_manager
@@ -171,6 +173,7 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor):
     from verl.utils.dataset.rl_dataset import RLHFDataset
 
     if "custom_cls" in data_config and data_config.custom_cls.get("path", None) is not None:
+        raise NotImplementedError("Custom dataset class is not supported yet, please use RLHFDataset instead.")
         from verl.utils.import_utils import load_extern_type
 
         dataset_cls = load_extern_type(data_config.custom_cls.path, data_config.custom_cls.name)
@@ -187,6 +190,21 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor):
         config=data_config,
     )
 
+    # create a new feature called "prompt_id" to identify the prompt
+    def generate_simple_prompt_id(data_source, extra_info):
+        """Generate a simple unique prompt ID using data_source + split + index"""
+        split = extra_info.get("split", "unknown")
+        # if "original_question" in extra_info and extra_info["original_question"] is not None:
+        #     prompt_bytes = extra_info["original_question"].encode('utf-8')
+        #     sha256_hash = hashlib.sha256(prompt_bytes).hexdigest()
+        # else:
+        random_id = str(uuid.uuid4())
+        return f"{data_source}_{split}_{random_id}"
+
+    dataset.dataframe["prompt_id"] = dataset.dataframe.apply(
+        lambda row: generate_simple_prompt_id(row["data_source"], row["extra_info"]), axis=1
+        )
+    dataset.dataframe["on_policy_pass_rate"] = 0.0
     return dataset
 
 
