@@ -45,8 +45,8 @@ class StarPlacementPuzzleVerifier(Verifier):
             
             # 打印星星网格以便调试
             # print("星星网格:")
-            for row in star_grid:
-                print(''.join(['* ' if cell == 1 else '. ' for cell in row]))
+            # for row in star_grid:
+            #     print(''.join(['* ' if cell == 1 else '. ' for cell in row]))
             
             # 1. 检查每行是否有k颗星星
             for i in range(n):
@@ -96,7 +96,6 @@ class StarPlacementPuzzleVerifier(Verifier):
             return True
             
         except Exception as e:
-            print(f"Verification error (StarPlacementPuzzle): {e}")
             return False 
         
     def extract_answer(self, test_solution: str):
@@ -132,7 +131,7 @@ class StarPlacementPuzzleVerifier(Verifier):
                                 result[region] = [(row-1, col-1) for row, col in coords]
                             return result
                     except (ValueError, SyntaxError) as e:
-                        print(f"NOTE!!! parse error!!!! (StarPlacementPuzzle): {e}")
+                        pass
                 
                 # 如果上面的方法失败，尝试解析变量赋值
                 assign_match = re.search(r'(\w+)\s*=\s*(\{[^{}]*\})', code_content, re.DOTALL)
@@ -149,12 +148,11 @@ class StarPlacementPuzzleVerifier(Verifier):
                                 result[region] = [(row-1, col-1) for row, col in coords]
                             return result
                     except (ValueError, SyntaxError) as e:
-                        print(f"NOTE!!! parse error!!!! (StarPlacementPuzzle): {e}")
+                        pass
             except Exception as e:
-                print(f"NOTE!!! parse error!!!! (StarPlacementPuzzle): {e}")
+                pass
             
             return None
             
         except Exception as e:
-            print(f"NOTE!!! parse error!!!! (StarPlacementPuzzle): {e}")
             return None

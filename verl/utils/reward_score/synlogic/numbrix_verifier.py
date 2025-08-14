@@ -60,7 +60,6 @@ class NumbrixVerifier(Verifier):
             
             return True
         except Exception as e:
-            print(f"Verification error (Numbrix): {e}")
             return False
         
     def extract_answer(self, test_solution: str, strict=False):
@@ -99,5 +98,4 @@ class NumbrixVerifier(Verifier):
             
             return grid
         except Exception as e:
-            print(f"NOTE!!! parse error!!!! (Numbrix): {e}")
             return None

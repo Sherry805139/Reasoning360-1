@@ -20,7 +20,6 @@ class MathPathVerifier(Verifier):
         try:
             test_answer = self.extract_answer(test_solution=test_answer)
         except Exception as e:
-            print(f"NOTE!!! parse error!!!! (MathPath): {e}")
             return False 
 
         try:
@@ -73,7 +72,6 @@ class MathPathVerifier(Verifier):
             return True
             
         except Exception as e:
-            print(f"Verification error (MathPath): {e}")
             return False 
         
 

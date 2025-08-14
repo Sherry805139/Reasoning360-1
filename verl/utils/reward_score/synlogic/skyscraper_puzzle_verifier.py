@@ -43,9 +43,9 @@ class SkyscraperPuzzleVerifier(Verifier):
                 # print("无法提取有效网格")
                 return False
                 
-            print("提取的网格:")
-            for row in grid:
-                print(row)
+            # print("提取的网格:")
+            # for row in grid:
+            #     print(row)
             
             # 检查网格规模
             if len(grid) != n or any(len(row) != n for row in grid):
@@ -105,7 +105,6 @@ class SkyscraperPuzzleVerifier(Verifier):
             return True
         
         except Exception as e:
-            print(f"Verification error (SkyscraperPuzzle): {e}")
             return False
     
     def _count_visible_skyscrapers(self, heights):
@@ -165,5 +164,4 @@ class SkyscraperPuzzleVerifier(Verifier):
             # 如果提取失败，返回原始答案
             return test_solution
         except Exception as e:
-            print(f"NOTE!!! parse error!!!! (SkyscraperPuzzle): {e}")
             return test_solution
