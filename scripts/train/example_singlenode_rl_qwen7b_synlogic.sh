@@ -44,8 +44,8 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/test
 
 # synlogic
-synlogic_train_path=${TRAIN_DATA_DIR}/synlogic_object_counting_train.parquet
-synlogic_test_path=${TEST_DATA_DIR}/synlogic_object_counting_test.parquet
+synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_train_12.9k.parquet
+synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_test_1.4k.parquet
 
 # Math (train)
 math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet
@@ -261,7 +261,7 @@ offload=True
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=5 \
+    trainer.save_freq=1000 \
     trainer.test_freq=5 \
     trainer.total_epochs=5 \
     +trainer.val_generations_to_log_to_wandb=30 \

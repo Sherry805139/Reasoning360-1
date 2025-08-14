@@ -161,3 +161,6 @@ analysis/
 wandb/
 outputs/
 data_preprocess/data_inspection.ipynb
+
+checkpoints/
+.vscode/
