@@ -1,12 +1,16 @@
+# Performance tuning guide.
+
 Optimizing training speed for large models like the 70B long-context model is a battle against two constraints: GPU memory and computational throughput. This guide explains the key parameters in veRL that allow you to manage these constraints effectively.
+
+This guide complements to veRL's official [performance tuning guide](https://verl.readthedocs.io/en/latest/perf/perf_tuning.html) by providing (1) basic concept explanations, (2) a cheat sheet (table view) of how each argument affect memory, speed, and ML score, and (3) case studies of real configurations.
 
 ## 1. Preliminaries
 
 Before diving into individual parameters, there is a crucial formula of global (or mini-)batch size to keep in mind.
 
-$$
-\text{mini\_batch\_size} = \text{micro\_batch\_size} \times \text{grad\_accum\_steps} \times \text{data\_parallel\_size}
-$$
+```
+mini_batch_size = micro_batch_size * grad_accum_steps * data_parallel_size
+```
 
 - **Mini-batch size**: The true batch size that the optimizer sees. Affects ML stability and convergence.
 - **Micro-batch size**: What a single GPU processes in one forward/backward pass. Affects GPU memory usage and utilization.
@@ -19,7 +23,7 @@ $$
 - **Mini-batch size(`actor.ppo_mini_batch_size`)**[tag: ML, system]: The mini (or global) batch size to update the model's gradients. This is the conventional mini (or global) batch size in classical ML and large-scale LLM (pre-)training.
     - From an ML perspective, a larger batch size leads to more stable gradient estimates (lower variance), which is especially beneficial for LLM training. However, too large a mini-batch size can hurt model generalization by converging to sharp minima, slow down convergence in terms of number of parameter updates (fewer updates per epoch). When using online RL algorithms such as PPO, setting `actor.ppo_mini_batch_size` close to or even equal to `data.train_prompt_bsz` can improve “on-policyness,” thereby reducing policy lag and potentially leading to more stable and consistent updates.
     - From a system perspective, we need to consider GPU memory limits and training speed. A larger mini-batch size, when achievable, generally leads to faster training by better utilizing the GPU's computational resources. This speedup is most obvious when no gradient accumulation is needed. Even with gradient accumulation, a larger mini-batch size can be faster because it amortizes the cost of the optimizer step over more data <toverify>.
-- **Micro-batch size(`actor.ppo_micro_batch_size_per_gpu`**and deprecated **`actor.ppo_micro_batch_size`)**[tag: system]: The actual batch size processed per GPU (or DP) in a single forward/backward pass. Unlike Mini-batch size, Micro-batch size is purely a system optimization parameter and does not directly affect ML performance. Its primary role is to manage memory usage while maximizing GPU utilization. Finding the optimal micro-batch size is tricky: it depends on the training sequence length, model sharding strategy (e.g., FSDP), and model parallelization scheme (e.g., Megatron). Also note, the `per_gpu` naming is a bit imprecise, it actually means `per_data_parallel` . E.g., if you enable sequence parallel, multiple GPUs in one DP handle one sample.
+- **Micro-batch size(`actor.ppo_micro_batch_size_per_gpu`** and deprecated **`actor.ppo_micro_batch_size`)**[tag: system]: The actual batch size processed per GPU (or DP) in a single forward/backward pass. Unlike Mini-batch size, Micro-batch size is purely a system optimization parameter and does not directly affect ML performance. Its primary role is to manage memory usage while maximizing GPU utilization. Finding the optimal micro-batch size is tricky: it depends on the training sequence length, model sharding strategy (e.g., FSDP), and model parallelization scheme (e.g., Megatron). Also note, the `per_gpu` naming is a bit imprecise, it actually means `per_data_parallel` . E.g., if you enable sequence parallel, multiple GPUs in one DP handle one sample.
     
     *Best practice:* Start with a micro-batch size of 1. If there are no out-of-memory (OOM) errors, incrementally increase it to find the sweet spot that maximizes throughput. If you encounter OOM, consider more aggressive sharding or parallelism strategies like sequence parallelism before reducing the micro-batch size. Another option is to use `use_dynamic_bsz`.
     
@@ -54,3 +58,8 @@ $$
 ## 4. Case Studies
 
 An example 70B long-cot training, using distilled-r1-Llama3.1-70B as example, is run `sbatch scripts/example_multinode_rl_llama3.1_70b_distill_megatron.sh` using 32 nodes with training TP=8, PP=2, SP=8, rollout TP=4. The parameters are tuned (e.g., we find PP doesn't need to be high, 2 is enough), but not optmized.
+
+## TODO
++ [ ] Table views on how each argument affect memory, speed, and ML score in both training and rollout.
++ [ ] Add more arguments, especially in the rollout phase.
++ [ ] Add and elaborate the case studies, hopefully with speed plots.

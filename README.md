@@ -10,16 +10,18 @@
   <a href="https://huggingface.co/LLM360/guru-7B">
     <img alt="Model" src="https://img.shields.io/badge/Model-guru--model-ffcc00?logo=huggingface&logoColor=yellow">
   </a>
+  <a href="https://wandb.ai/mbzuai-llm/Guru/">
+    <img alt="Wandb Log" src="https://img.shields.io/badge/Log-wandb-ffcc00?logo=wandb&logoColor=yellow">
+
+  </a>
 </p>
 
 
-This is the official repository of Reasoning360, a project dedicated to *open research on large-scale reasoning models*. The repository currently includes data processing and filtering tools, reinforcement learning (RL) training pipelines, and an evaluation suite. It's initialized from [verl](https://github.com/volcengine/verl).
+This is the official repository of Reasoning360, a project dedicated to *open research on large-scale reasoning models*. The repository currently includes data processing and filtering tools, reinforcement learning (RL) training pipelines, and an evaluation suite. It's initialized from [veRL](https://github.com/volcengine/verl).
 
 ## 🔥News
-+ The full [wandb](https://wandb.ai/mbzuai-llm/Guru/) logs for Guru-7B/32B training is cleaned up and public now!
-
-+ Our paper to analyze and improve multi-domain RL for LLM reasoning with Guru data "[Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective](https://arxiv.org/abs/2506.14965)" is out on arxiv.
-
++ *08/20/2025*: The full [wandb logs](https://wandb.ai/mbzuai-llm/Guru/) for Guru-7B/32B training is public now.
++ Our paper to analyze and improve multi-domain RL for LLM reasoning with Guru data "[Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective](https://arxiv.org/abs/2506.14965)" is out on arxiv. Also, we release the [model](https://huggingface.co/LLM360/guru-32B) and [data](https://huggingface.co/datasets/LLM360/guru-RL-92k).
 + The ready-to-train 92K Guru RL data across six domains is released under [LLM360 huggingface](https://huggingface.co/datasets/LLM360/guru_RL).
 
 
@@ -148,7 +150,7 @@ For detailed setup instructions, see [`verl/utils/reward_score/coder1/README.md`
 ### (4) Train
 We provide the multi-node training slurm script using a `math3k` subset data for ablation, not the full data. Change the `SHARED_DATA_PATH` upon your data path.
 ```bash
-sbatch scripts/train/example_multinode_rl_qwen32b_base.sh
+sbatch scripts/train/example_multinode_rl_qwen2.5_32b_base_fsdp.sh
 ```
 
 If you need to train on the full data or include STEM data in Guru, host the llm-as-verifier model first before launching the training.
@@ -156,9 +158,6 @@ If you need to train on the full data or include STEM data in Guru, host the llm
 sbatch scripts/tools/serve_llm_as_verifier.sh
 ```
 Then fill in the `export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"` by the llm-as-verifier server IP. It uses one GPU node to serve a 1.5B [general-verifier](https://huggingface.co/TIGER-Lab/general-verifier) now.
-
-(TODO: build a single-node script not using slurm)
-
 
 ---
 ## Evaluation
