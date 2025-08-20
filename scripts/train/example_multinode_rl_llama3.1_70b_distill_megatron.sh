@@ -49,7 +49,7 @@ export RAY_record_ref_creation_sites=1  # NOTE(yonghao): DEBUG code
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=./data
 TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train/
-TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval/
+TEST_DATA_DIR=${SHARED_DATA_PATH}/online_eval/
 
 # Math (train)
 math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet
@@ -65,7 +65,7 @@ primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__primeintellect_7.5k.parquet
 taco_train_path=${TRAIN_DATA_DIR}/codegen__taco_8.8k.parquet
 # Code (test)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
+mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_200.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
 
 # Logic (train)
@@ -76,26 +76,25 @@ graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_1.2k.parquet
 ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_1.9k.parquet
 zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_1.3k.parquet
 # Logic (test)
-zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300.parquet
-ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150.parquet
+ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_100.parquet
+zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
+arcagi_test_path=${TEST_DATA_DIR}/logic__arcagi1_200.parquet
 
 # Simulation (train)
 codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_3.7k.parquet
 # Simulation (test)
-codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500.parquet
-arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
+codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_200.parquet
 
 # Table (train)
 hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
 multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
 # Table (test)
-multihier_test_path=${TEST_DATA_DIR}/table__multihier_300.parquet
-hitab_test_path=${TEST_DATA_DIR}/table__hitab_300.parquet
+multihier_test_path=${TEST_DATA_DIR}/table__multihier_200.parquet
+hitab_test_path=${TEST_DATA_DIR}/table__hitab_200.parquet
 
 # Stem (train)
 webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 # Stem (test)
-gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
 train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed

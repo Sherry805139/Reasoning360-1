@@ -1,6 +1,9 @@
-# Contributing to verl
+# Contributing to Reasoning360’s fork of **verl**
 
-Thank you for considering a contribution to verl! We welcome contributions of any kind - bug fixes, enhancements, documentation improvements, or even just feedback. Whether you're an experienced developer or this is your first open-source project, your help is invaluable.
+This repository is a **maintained fork** of [volcengine/verl](https://github.com/volcengine/verl).  
+We follow the upstream project’s contributing practices wherever possible and contribute improvements back upstream.
+
+Reasoning360 greatly appreciates contributions—bug fixes, enhancements, docs, and feedback. If you’re new here, welcome! 🎉
 
 Your support can take many forms:
 - Report issues or unexpected behaviors.

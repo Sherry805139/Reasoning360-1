@@ -16,6 +16,8 @@
 This is the official repository of Reasoning360, a project dedicated to *open research on large-scale reasoning models*. The repository currently includes data processing and filtering tools, reinforcement learning (RL) training pipelines, and an evaluation suite. It's initialized from [verl](https://github.com/volcengine/verl).
 
 ## 🔥News
++ The full [wandb](https://wandb.ai/mbzuai-llm/Guru/) logs for Guru-7B/32B training is cleaned up and public now!
+
 + Our paper to analyze and improve multi-domain RL for LLM reasoning with Guru data "[Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective](https://arxiv.org/abs/2506.14965)" is out on arxiv.
 
 + The ready-to-train 92K Guru RL data across six domains is released under [LLM360 huggingface](https://huggingface.co/datasets/LLM360/guru_RL).
