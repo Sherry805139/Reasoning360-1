@@ -139,6 +139,7 @@ outputs
 !/LICENSE
 !/pyproject.toml
 !/setup.py
+!/performance_tuning_guide.md
 
 # Slurm logs
 slurm/
