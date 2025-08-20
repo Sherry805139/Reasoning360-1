@@ -21,9 +21,7 @@ This is the official repository of Reasoning360, a project dedicated to *open re
 
 ## 🔥News
 + *08/20/2025*: The full [wandb logs](https://wandb.ai/mbzuai-llm/Guru/) for Guru-7B/32B training is public now.
-
 + Our paper to analyze and improve multi-domain RL for LLM reasoning with Guru data "[Revisiting Reinforcement Learning for LLM Reasoning from A Cross-Domain Perspective](https://arxiv.org/abs/2506.14965)" is out on arxiv. Also, we release the [model](https://huggingface.co/LLM360/guru-32B) and [data](https://huggingface.co/datasets/LLM360/guru-RL-92k).
-
 + The ready-to-train 92K Guru RL data across six domains is released under [LLM360 huggingface](https://huggingface.co/datasets/LLM360/guru_RL).
 
 
@@ -152,7 +150,7 @@ For detailed setup instructions, see [`verl/utils/reward_score/coder1/README.md`
 ### (4) Train
 We provide the multi-node training slurm script using a `math3k` subset data for ablation, not the full data. Change the `SHARED_DATA_PATH` upon your data path.
 ```bash
-sbatch scripts/train/example_multinode_rl_qwen32b_base.sh
+sbatch scripts/train/example_multinode_rl_qwen2.5_32b_base_fsdp.sh
 ```
 
 If you need to train on the full data or include STEM data in Guru, host the llm-as-verifier model first before launching the training.
