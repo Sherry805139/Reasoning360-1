@@ -517,12 +517,24 @@ class RayDALUTrainer(RayPPOTrainer):
                             avg_length_df.rename(columns={"response_length": "prev_passed_avg_length"}, inplace=True)
                             max_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].max().set_index('prompt_id')[['response_length']]
                             max_length_df.rename(columns={"response_length": "prev_passed_max_length"}, inplace=True)
+                            quantile_8_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.8).set_index('prompt_id')[['response_length']]
+                            quantile_8_length_df.rename(columns={"response_length": "prev_passed_80th_length"}, inplace=True)
+                            quantile_5_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.5).set_index('prompt_id')[['response_length']]
+                            quantile_5_length_df.rename(columns={'response_length': "prev_passed_50th_length"}, inplace=True)
                             
                             # Update the dataframe with both pass rates and average lengths
                             self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
+                            avg_length_df = avg_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
+                            max_length_df = max_length_df.astype(self.train_dataset.dataframe['prev_passed_max_length'].dtypes)
+                            quantile_8_length_df = quantile_8_length_df.astype(self.train_dataset.dataframe['prev_passed_80th_length'].dtypes)
+                            quantile_5_length_df = quantile_5_length_df.astype(self.train_dataset.dataframe['prev_passed_50th_length'].dtypes)
+                            
                             self.train_dataset.dataframe.update(pass_rate_df)
                             self.train_dataset.dataframe.update(avg_length_df)
                             self.train_dataset.dataframe.update(max_length_df)
+                            self.train_dataset.dataframe.update(quantile_8_length_df)
+                            self.train_dataset.dataframe.update(quantile_5_length_df)
+                            
                             self.train_dataset.dataframe = self.train_dataset.dataframe.reset_index()
                         else:
                             # If no successful rollouts in this batch, only update pass rates
@@ -609,7 +621,15 @@ class RayDALUTrainer(RayPPOTrainer):
                             "train/prev_passed_avg_length_avg": batch_df["prev_passed_avg_length"].mean(),
                             "train/prev_passed_avg_length_std": batch_df["prev_passed_avg_length"].std(),
                             "train/prev_passed_avg_length_min": batch_df["prev_passed_avg_length"].min(),
-                            "train/prev_passed_avg_length_max": batch_df["prev_passed_avg_length"].max()
+                            "train/prev_passed_avg_length_max": batch_df["prev_passed_avg_length"].max(),
+                            'train/prev_passed_80th_length_avg': batch_df["prev_passed_80th_length"].mean(),
+                            'train/prev_passed_80th_length_std': batch_df["prev_passed_80th_length"].std(),
+                            'train/prev_passed_80th_length_min': batch_df["prev_passed_80th_length"].min(),
+                            'train/prev_passed_80th_length_max': batch_df["prev_passed_80th_length"].max(),
+                            'train/prev_passed_50th_length_avg': batch_df["prev_passed_50th_length"].mean(),
+                            'train/prev_passed_50th_length_std': batch_df["prev_passed_50th_length"].std(),
+                            'train/prev_passed_50th_length_min': batch_df["prev_passed_50th_length"].min(),
+                            'train/prev_passed_50th_length_max': batch_df["prev_passed_50th_length"].max()
                         })
 
                 metrics["train/num_gen_batches"] = num_gen_batches
