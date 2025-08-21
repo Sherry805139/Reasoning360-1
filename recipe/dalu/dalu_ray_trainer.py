@@ -18,17 +18,17 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import os
 import uuid
-from pprint import pprint
-from copy import deepcopy
 from collections import defaultdict
-from tqdm import tqdm
+from copy import deepcopy
+from pprint import pprint
 
 import numpy as np
-import pandas as pd 
-import ray
+import pandas as pd  
 import torch
+from tqdm import tqdm
 
 from verl import DataProto
+from verl.trainer.ppo.core_algos import agg_loss
 from verl.trainer.ppo.metric_utils import (
     compute_data_metrics,
     compute_throughout_metrics,
@@ -42,10 +42,10 @@ from verl.trainer.ppo.ray_trainer import (
     compute_advantage,
     compute_response_mask,
 )
-from verl.utils.profiler import simple_timer
+from verl.utils.profiler import marked_timer
 
 
-class RayEntropyTrainer(RayPPOTrainer):
+class RayDALUTrainer(RayPPOTrainer):
     """
     Note that this trainer runs on the driver process on a single CPU/GPU node.
     """
@@ -195,7 +195,6 @@ class RayEntropyTrainer(RayPPOTrainer):
         to construct the PPO dataflow.
         The light-weight advantage computation is done on the driver process.
         """
-        from verl.utils.tracking import Tracking
         from omegaconf import OmegaConf
 
         from verl.utils.tracking import Tracking
@@ -206,22 +205,20 @@ class RayEntropyTrainer(RayPPOTrainer):
             default_backend=self.config.trainer.logger,
             config=OmegaConf.to_container(self.config, resolve=True),
         )
+
         self.global_steps = 0
 
         # load checkpoint before doing anything
         self._load_checkpoint()
 
-        # perform validation on the training data for data filtering
-        # self._validate_training_data()
-
         # perform validation before training
         # currently, we only support validation using the reward_function.
-        if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', True):
+        if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             val_metrics = self._validate()
             assert val_metrics, f"{val_metrics=}"
             pprint(f"Initial validation metrics: {val_metrics}")
             logger.log(data=val_metrics, step=self.global_steps)
-            if self.config.trainer.get('val_only', False):
+            if self.config.trainer.get("val_only", False):
                 return
 
         # add tqdm
@@ -235,24 +232,43 @@ class RayEntropyTrainer(RayPPOTrainer):
         batch = None
         num_prompt_in_batch = 0
         num_gen_batches = 0
-        
         for epoch in range(self.config.trainer.total_epochs):
-            for batch_dict in self.train_dataloader:
-                metrics = {}
+            train_dataset = self._create_priority_dataloader(
+                epoch_idx=epoch,
+                dynamic_filtering=self.config.data.get("dynamic_filtering", False),
+                enable_budget=self.config.trainer.get("enable_budget", False),
+            )
+            # create create the default_local_dir if not exists
+            if not os.path.exists(self.config.trainer.default_local_dir):
+                os.makedirs(self.config.trainer.default_local_dir)
+            train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, 
+                f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
                 metrics = {}
-                # Here the self.train_dataset is the whole dataset, while self.train_dataloader is a
-                # DataLoader that yields batches of data across GPUs. 
-                # len(self.train_dataloader) * #GPUs = len(self.train_dataset)
-                # (bsz, seq_len)
+
+                do_profile = (
+                    self.global_steps in self.config.trainer.profile_steps
+                    if self.config.trainer.profile_steps is not None
+                    else False
+                )
+                with marked_timer("start_profile", timing_raw):
+                    if do_profile:
+                        self.actor_rollout_wg.start_profile(role="e2e", profile_step=self.global_steps)
+                        if self.use_reference_policy:
+                            self.ref_policy_wg.start_profile()
+                        if self.use_critic:
+                            self.critic_wg.start_profile()
+                        if self.use_rm:
+                            self.rm_wg.start_profile()
+
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 num_gen_batches += 1
                 # pop those keys for generation
-                if "multi_modal_inputs" in new_batch.non_tensor_batch.keys():
+                if "multi_modal_data" in new_batch.non_tensor_batch.keys():
                     gen_batch = new_batch.pop(
                         batch_keys=["input_ids", "attention_mask", "position_ids"],
-                        non_tensor_batch_keys=["raw_prompt_ids", "multi_modal_data", "multi_modal_inputs"],
+                        non_tensor_batch_keys=["raw_prompt_ids", "multi_modal_data"],
                     )
                 else:
                     gen_batch = new_batch.pop(
@@ -260,23 +276,46 @@ class RayEntropyTrainer(RayPPOTrainer):
                         non_tensor_batch_keys=["raw_prompt_ids"],
                     )
                 gen_batch = gen_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                
+                # Use pre-computed per_prompt_length_budget from the dataframe
+                batch_prompt_ids = batch_dict["prompt_id"]
+                per_prompt_length_budget = []
+                per_prompt_pass_rate = []
+                
+                for prompt_id in batch_prompt_ids:
+                    row = train_dataset.dataframe[train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
+                    per_prompt_length_budget.append(int(row['per_prompt_length_budget']))
+                    per_prompt_pass_rate.append(row['prev_pass_rate'])
+                
+                # Create repeated budgets for all trajectories BEFORE adding to gen_batch
+                repeated_budgets = []
+                for budget in per_prompt_length_budget:
+                    repeated_budgets.extend([budget] * self.config.actor_rollout_ref.rollout.n)
+                
+                # Log statistics
+                avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
+                avg_batch_max_length = np.mean(per_prompt_length_budget)
+                
+                print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
+                print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_length_budget)}-{max(per_prompt_length_budget)})")
+                print(f"Set gen_batch.non_tensor_batch['per_prompt_length_budget'] to list of {len(repeated_budgets)} lengths (avg: {avg_batch_max_length:.1f})")
+                
+                # Add the repeated budgets to gen_batch
+                gen_batch.non_tensor_batch["per_prompt_length_budget"] = np.array(repeated_budgets, dtype=object)
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
-                with simple_timer("step", timing_raw):
+                with marked_timer("step", timing_raw):
                     # generate a batch
-                    # with simple_timer("gen", timing_raw):
-                    #     gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
-                    with simple_timer("gen", timing_raw):
-                        if not self.async_rollout_mode:
-                            gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
-                        else:
-                            gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
+                    with marked_timer("gen", timing_raw, "red"):
+                        gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                        timing_raw.update(gen_batch_output.meta_info["timing"])
+                        gen_batch_output.meta_info.pop("timing", None)
 
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
-                        with simple_timer("gen_max", timing_raw):
+                        with marked_timer("gen_max", timing_raw, "red"):
                             gen_baseline_batch = deepcopy(gen_batch)
-                            gen_baseline_batch.meta_info['do_sample'] = False
+                            gen_baseline_batch.meta_info["do_sample"] = False
                             gen_baseline_output = self.actor_rollout_wg.generate_sequences(gen_baseline_batch)
 
                             new_batch = new_batch.union(gen_baseline_output)
@@ -285,7 +324,7 @@ class RayEntropyTrainer(RayPPOTrainer):
 
                             new_batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
 
-                            new_batch.batch['reward_baselines'] = reward_baseline_tensor
+                            new_batch.batch["reward_baselines"] = reward_baseline_tensor
 
                             del gen_baseline_batch, gen_baseline_output
 
@@ -294,9 +333,14 @@ class RayEntropyTrainer(RayPPOTrainer):
                     )
                     # repeat to align with repeated responses in rollout
                     new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                    
+                    # Remove per_prompt_length_budget from gen_batch_output if it exists to prevent union conflict
+                    if "per_prompt_length_budget" in gen_batch_output.non_tensor_batch:
+                        gen_batch_output.non_tensor_batch.pop("per_prompt_length_budget")
+                    
                     new_batch = new_batch.union(gen_batch_output)
 
-                    with simple_timer("reward", timing_raw):
+                    with marked_timer("reward", timing_raw, "yellow"):
                         # compute scores. Support both model and function-based.
                         # We first compute the scores using reward model. Then, we call reward_fn to combine
                         # the results from reward model and rule-based results.
@@ -310,15 +354,14 @@ class RayEntropyTrainer(RayPPOTrainer):
                         try:
                             reward_result = self.reward_fn(new_batch, return_dict=True)
                             reward_tensor = reward_result["reward_tensor"]
-                            reward_extra_infos_dict = reward_result["reward_extra_info"]
+                            reward_extra_infos_dict = reward_result.get("reward_extra_info", {})
                         except Exception as e:
                             print(f"Error in reward_fn: {e}")
                             reward_tensor = self.reward_fn(new_batch)
                             reward_extra_infos_dict = {}
 
-                        new_batch.batch['token_level_scores'] = reward_tensor
+                        new_batch.batch["token_level_scores"] = reward_tensor
 
-                        print(f'{list(reward_extra_infos_dict.keys())=}')
                         if reward_extra_infos_dict:
                             new_batch.non_tensor_batch.update(
                                 {k: np.array(v) for k, v in reward_extra_infos_dict.items()}
@@ -333,7 +376,7 @@ class RayEntropyTrainer(RayPPOTrainer):
                                 kl_metrics
                             )  # TODO: This will be cleared if we use multiple genenration batches
                         else:
-                            new_batch.batch['token_level_rewards'] = new_batch.batch['token_level_scores']
+                            new_batch.batch["token_level_rewards"] = new_batch.batch["token_level_scores"]
 
                     if not self.config.algorithm.filter_groups.enable:
                         batch = new_batch
@@ -369,7 +412,7 @@ class RayEntropyTrainer(RayPPOTrainer):
                         num_prompt_in_batch += len(kept_prompt_uids)
 
                         kept_traj_idxs = []
-                        for idx, traj_from_prompt_uid in enumerate(new_batch.non_tensor_batch['uid']):
+                        for idx, traj_from_prompt_uid in enumerate(new_batch.non_tensor_batch["uid"]):
                             if traj_from_prompt_uid in kept_prompt_uids:
                                 kept_traj_idxs.append(idx)
 
@@ -378,10 +421,11 @@ class RayEntropyTrainer(RayPPOTrainer):
 
                         prompt_bsz = self.config.data.train_batch_size
                         if num_prompt_in_batch < prompt_bsz:
-                            print(f'{num_prompt_in_batch=} < {prompt_bsz=}')
+                            print(f"{num_prompt_in_batch=} < {prompt_bsz=}")
                             max_num_gen_batches = self.config.algorithm.filter_groups.max_num_gen_batches
                             if max_num_gen_batches <= 0 or num_gen_batches < max_num_gen_batches:
-                                print(f'{num_gen_batches=}. Keep generating...')
+                                print(f"{num_gen_batches=}. Keep generating...")
+                                progress_bar.update(1)
                                 continue
                             else:
                                 raise ValueError(
@@ -392,43 +436,48 @@ class RayEntropyTrainer(RayPPOTrainer):
                         else:
                             # Align the batch
                             traj_bsz = self.config.data.train_batch_size * self.config.actor_rollout_ref.rollout.n
-                            print(
-                                f"Collected {num_prompt_in_batch} / {self.config.data.train_batch_size} prompt. "
-                                f"Collecting finished."
-                            )
                             batch = batch[:traj_bsz]
 
                     # === Updating ===
 
                     batch.batch["response_mask"] = compute_response_mask(batch)
 
-                    # balance the number of valid tokens on each dp rank.
-                    # Note that this breaks the order of data inside the batch.
-                    # Please take care when you implement group based adv computation such as GRPO and rloo
-                    if self.config.trainer.balance_batch and not self.config.trainer.enable_budget:
+                    # Balance the number of valid tokens across DP ranks.
+                    # NOTE: This usually changes the order of data in the `batch`,
+                    # which won't affect the advantage calculation (since it's based on uid),
+                    # but might affect the loss calculation (due to the change of mini-batching).
+                    # TODO: Decouple the DP balancing and mini-batching.
+                    if self.config.trainer.balance_batch:
                         self._balance_batch(batch, metrics=metrics)
 
                     # compute global_valid tokens
-                    batch.meta_info['global_token_num'] = torch.sum(batch.batch['attention_mask'], dim=-1).tolist()
+                    batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
                     # recompute old_log_probs
-                    with simple_timer("old_log_prob", timing_raw):
+                    with marked_timer("old_log_prob", timing_raw, "blue"):
                         old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                        entropys = old_log_prob.batch["entropys"]
+                        response_masks = batch.batch["response_mask"]
+                        loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
+                        entropy_agg = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
+                        old_log_prob_metrics = {"actor/entropy": entropy_agg.detach().item()}
+                        metrics.update(old_log_prob_metrics)
+                        old_log_prob.batch.pop("entropys")
                         batch = batch.union(old_log_prob)
 
                     if self.use_reference_policy:
                         # compute reference log_prob
-                        with simple_timer("ref", timing_raw):
+                        with marked_timer("ref", timing_raw, "olive"):
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
                             batch = batch.union(ref_log_prob)
 
                     # compute values
                     if self.use_critic:
-                        with simple_timer("values", timing_raw):
+                        with marked_timer("values", timing_raw, "cyan"):
                             values = self.critic_wg.compute_values(batch)
                             batch = batch.union(values)
 
-                    with simple_timer("adv", timing_raw):
+                    with marked_timer("adv", timing_raw, "brown"):
                         # compute advantages, executed on the driver process
                         norm_adv_by_std_in_grpo = self.config.algorithm.get("norm_adv_by_std_in_grpo", True)
                         batch = compute_advantage(
@@ -439,14 +488,14 @@ class RayEntropyTrainer(RayPPOTrainer):
                             num_repeat=self.config.actor_rollout_ref.rollout.n,
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                         )
-                    with _timer('pass_rate_append', timing_raw):
-                        # compute the pass rate for the batch 
+                    with marked_timer("pass_rate_append", timing_raw, "orange"):
+                # compute the pass rate for the batch 
                         temp_df = pd.DataFrame({
                             "prompt_id": batch.non_tensor_batch["prompt_id"],
                             "prev_pass_rate": batch.non_tensor_batch["score"]
                         })
                         pass_rate_df = temp_df.groupby("prompt_id", as_index=False)["prev_pass_rate"].mean().set_index('prompt_id')[['prev_pass_rate']]
-                        
+
                         # compute the average response length for each prompt_id in the batch
                         # Only include lengths for successful rollouts (score == 1)
                         response_length = batch.batch["responses"].shape[-1]
@@ -484,15 +533,15 @@ class RayEntropyTrainer(RayPPOTrainer):
 
                     # update critic
                     if self.use_critic:
-                        with simple_timer("update_critic", timing_raw):
+                        with marked_timer("update_critic", timing_raw, "pink"):
                             critic_output = self.critic_wg.update_critic(batch)
-                        critic_output_metrics = reduce_metrics(critic_output.meta_info['metrics'])
+                        critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                         metrics.update(critic_output_metrics)
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
                         # update actor
-                        with simple_timer("update_actor", timing_raw):
+                        with marked_timer("update_actor", timing_raw, "red"):
                             actor_output = self.actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
@@ -503,7 +552,7 @@ class RayEntropyTrainer(RayPPOTrainer):
                         and self.config.trainer.test_freq > 0
                         and (is_last_step or self.global_steps % self.config.trainer.test_freq == 0)
                     ):
-                        with simple_timer("testing", timing_raw):
+                        with marked_timer("testing", timing_raw, "green"):
                             val_metrics: dict = self._validate()
                             if is_last_step:
                                 last_val_metrics = val_metrics
@@ -512,13 +561,27 @@ class RayEntropyTrainer(RayPPOTrainer):
                     if self.config.trainer.save_freq > 0 and (
                         is_last_step or self.global_steps % self.config.trainer.save_freq == 0
                     ):
-                        with simple_timer("save_checkpoint", timing_raw):
+                        with marked_timer("save_checkpoint", timing_raw, "green"):
                             self._save_checkpoint()
+
+                with marked_timer("stop_profile", timing_raw):
+                    if do_profile:
+                        self.actor_rollout_wg.stop_profile()
+                        if self.use_reference_policy:
+                            self.ref_policy_wg.stop_profile()
+                        if self.use_critic:
+                            self.critic_wg.stop_profile()
+                        if self.use_rm:
+                            self.rm_wg.stop_profile()
 
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 # TODO: implement actual tflpo and theoretical tflpo
+                n_gpus = self.resource_pool_manager.get_n_gpus()
+                metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))
+                timing_raw = defaultdict(float)  # clear timing
+
                 # Add per-prompt metrics for the current batch only
                 if hasattr(train_dataset, 'dataframe') and batch is not None:
                     # Get unique prompt_ids from the current batch
@@ -563,7 +626,7 @@ class RayEntropyTrainer(RayPPOTrainer):
                 logger.log(data=metrics, step=self.global_steps)
 
                 if is_last_step:
-                    pprint(f'Final validation metrics: {last_val_metrics}')
+                    pprint(f"Final validation metrics: {last_val_metrics}")
                     progress_bar.close()
                     return
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=server_llm_as_verifier
-#SBATCH --partition=main
+#SBATCH --account=iq
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
@@ -9,6 +9,8 @@
 #SBATCH --output=slurm/serve_llm_as_verifier_%j.log
 #SBATCH --error=slurm/serve_llm_as_verifier_%j.err
 
+
+source activate /mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360
 
 # (1) detect this node’s primary IP
 NODE_IP=$(hostname -I | awk '{print $1}')
