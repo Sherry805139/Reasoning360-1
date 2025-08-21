@@ -75,11 +75,43 @@ class RayDALUTrainer(RayPPOTrainer):
             # use half of the max response length as the average length for the first epoch
             self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4 
             self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4
+            self.train_dataset.dataframe["prev_passed_80th_length"] = self.config.data.get("max_response_length", 1024*28)
+            self.train_dataset.dataframe["prev_passed_50th_length"] = self.config.data.get("max_response_length", 1024*28)
+        
+        def _assign_length_budget(row, pass_rate_upper_bound, max_response_length):
+            prompt_pass_rate = row['prev_pass_rate']
+            passed_prompt_avg_length = row['prev_passed_avg_length']
+            passed_prompt_max_length = row['prev_passed_max_length']
+            
+            # Get configurable multipliers with default values
+            perfect_pass_rate_multiplier = self.config.data.get("perfect_pass_rate_multiplier", 1.0)
+            high_pass_rate_multiplier = self.config.data.get("high_pass_rate_multiplier", 0.8)
+            
+            if prompt_pass_rate == 1.0:
+                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
+            elif prompt_pass_rate > pass_rate_upper_bound:
+                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
+            else:
+                new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
+            
+            new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
+            new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
+            
+            return int(new_length_budget)
 
-        
-        original_df = self.train_dataset.dataframe.copy()
-        
+        if enable_budget:
+            max_response_length = self.config.data.get("max_response_length", 1024*28)
+            pass_rate_upper_bound = self.config.trainer.get("pass_rate_upper_bound", 1.0)
+
+            self.train_dataset.dataframe["per_prompt_length_budget"] = self.train_dataset.dataframe.apply(
+                lambda row: _assign_length_budget(row, pass_rate_upper_bound, max_response_length),
+                axis=1
+            )
+        else:
+            self.train_dataset.dataframe["per_prompt_length_budget"] = self.config.data.get("max_response_length", 1024*28)  # Use fixed length budget
+
         if dynamic_filtering:
+            original_df = self.train_dataset.dataframe.copy()
             # Separate data by pass rate
             perfect_mask = original_df["prev_pass_rate"] == 1.0
             failed_mask = original_df["prev_pass_rate"] == 0.0
@@ -129,42 +161,8 @@ class RayDALUTrainer(RayPPOTrainer):
             print(f"Total discarded data points: {len(original_df) - len(filtered_df)}")
             print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
         else:
-            filtered_df = original_df.copy()
-        
-        def assign_length_budget(row, pass_rate_upper_bound, max_response_length):
-            prompt_pass_rate = row['prev_pass_rate']
-            passed_prompt_avg_length = row['prev_passed_avg_length']
-            passed_prompt_max_length = row['prev_passed_max_length']
-            
-            # Get configurable multipliers with default values
-            perfect_pass_rate_multiplier = self.config.data.get("perfect_pass_rate_multiplier", 1.0)
-            high_pass_rate_multiplier = self.config.data.get("high_pass_rate_multiplier", 0.8)
-            
-            if prompt_pass_rate == 1.0:
-                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
-            elif prompt_pass_rate > pass_rate_upper_bound:
-                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
-            else:
-                new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
-            
-            new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
-            new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
-            
-            return int(new_length_budget)
-        
-        if enable_budget:
-            # Shared logic for computing per_prompt_length_budget and creating dataloader
-            max_response_length = self.config.data.get("max_response_length", 1024*28)
-            pass_rate_upper_bound = self.config.data.get("pass_rate_upper_bound", 1.0)
-
-
-            filtered_df["per_prompt_length_budget"] = filtered_df.apply(
-                lambda row: assign_length_budget(row, pass_rate_upper_bound, max_response_length), axis=1
-            )
-            filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
-        else:
-            filtered_df["per_prompt_length_budget"] = self.config.data.get("max_response_length", 1024*28)  # Use fixed length budget
-        
+            filtered_df = self.train_dataset.dataframe.copy()
+                
         # Sort by per_prompt_length_budget for more efficient rollout batching
         filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
         
@@ -268,40 +266,14 @@ class RayDALUTrainer(RayPPOTrainer):
                 if "multi_modal_data" in new_batch.non_tensor_batch.keys():
                     gen_batch = new_batch.pop(
                         batch_keys=["input_ids", "attention_mask", "position_ids"],
-                        non_tensor_batch_keys=["raw_prompt_ids", "multi_modal_data"],
+                        non_tensor_batch_keys=["raw_prompt_ids", "multi_modal_data", "per_prompt_length_budget"],
                     )
                 else:
                     gen_batch = new_batch.pop(
                         batch_keys=["input_ids", "attention_mask", "position_ids"],
-                        non_tensor_batch_keys=["raw_prompt_ids"],
+                        non_tensor_batch_keys=["raw_prompt_ids", "per_prompt_length_budget"],
                     )
                 gen_batch = gen_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                
-                # Use pre-computed per_prompt_length_budget from the dataframe
-                batch_prompt_ids = batch_dict["prompt_id"]
-                per_prompt_length_budget = []
-                per_prompt_pass_rate = []
-                
-                for prompt_id in batch_prompt_ids:
-                    row = train_dataset.dataframe[train_dataset.dataframe['prompt_id'] == prompt_id].iloc[0]
-                    per_prompt_length_budget.append(int(row['per_prompt_length_budget']))
-                    per_prompt_pass_rate.append(row['prev_pass_rate'])
-                
-                # Create repeated budgets for all trajectories BEFORE adding to gen_batch
-                repeated_budgets = []
-                for budget in per_prompt_length_budget:
-                    repeated_budgets.extend([budget] * self.config.actor_rollout_ref.rollout.n)
-                
-                # Log statistics
-                avg_prompt_pass_rate = np.mean(per_prompt_pass_rate)
-                avg_batch_max_length = np.mean(per_prompt_length_budget)
-                
-                print(f"Average previous on-policy pass rate for this batch: {avg_prompt_pass_rate:.4f}")
-                print(f"Average batch max length: {avg_batch_max_length:.1f} (range: {min(per_prompt_length_budget)}-{max(per_prompt_length_budget)})")
-                print(f"Set gen_batch.non_tensor_batch['per_prompt_length_budget'] to list of {len(repeated_budgets)} lengths (avg: {avg_batch_max_length:.1f})")
-                
-                # Add the repeated budgets to gen_batch
-                gen_batch.non_tensor_batch["per_prompt_length_budget"] = np.array(repeated_budgets, dtype=object)
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
@@ -337,7 +309,8 @@ class RayDALUTrainer(RayPPOTrainer):
                     # Remove per_prompt_length_budget from gen_batch_output if it exists to prevent union conflict
                     if "per_prompt_length_budget" in gen_batch_output.non_tensor_batch:
                         gen_batch_output.non_tensor_batch.pop("per_prompt_length_budget")
-                    
+
+                    # raise ValueError(gen_batch_output, gen_batch_output.non_tensor_batch)
                     new_batch = new_batch.union(gen_batch_output)
 
                     with marked_timer("reward", timing_raw, "yellow"):
@@ -489,7 +462,7 @@ class RayDALUTrainer(RayPPOTrainer):
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                         )
                     with marked_timer("pass_rate_append", timing_raw, "orange"):
-                # compute the pass rate for the batch 
+                        # compute the pass rate for the batch 
                         temp_df = pd.DataFrame({
                             "prompt_id": batch.non_tensor_batch["prompt_id"],
                             "prev_pass_rate": batch.non_tensor_batch["score"]
@@ -526,15 +499,17 @@ class RayDALUTrainer(RayPPOTrainer):
                             self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
                             avg_length_df = avg_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             max_length_df = max_length_df.astype(self.train_dataset.dataframe['prev_passed_max_length'].dtypes)
-                            quantile_8_length_df = quantile_8_length_df.astype(self.train_dataset.dataframe['prev_passed_80th_length'].dtypes)
-                            quantile_5_length_df = quantile_5_length_df.astype(self.train_dataset.dataframe['prev_passed_50th_length'].dtypes)
+                            quantile_8_length_df = quantile_8_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
+                            quantile_5_length_df = quantile_5_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             
                             self.train_dataset.dataframe.update(pass_rate_df)
                             self.train_dataset.dataframe.update(avg_length_df)
                             self.train_dataset.dataframe.update(max_length_df)
                             self.train_dataset.dataframe.update(quantile_8_length_df)
                             self.train_dataset.dataframe.update(quantile_5_length_df)
-                            
+                            print(quantile_8_length_df, quantile_5_length_df)
+                            print(self.train_dataset.dataframe.columns)
+
                             self.train_dataset.dataframe = self.train_dataset.dataframe.reset_index()
                         else:
                             # If no successful rollouts in this batch, only update pass rates
@@ -595,13 +570,13 @@ class RayDALUTrainer(RayPPOTrainer):
                 timing_raw = defaultdict(float)  # clear timing
 
                 # Add per-prompt metrics for the current batch only
-                if hasattr(train_dataset, 'dataframe') and batch is not None:
+                if hasattr(self.train_dataset, 'dataframe') and batch is not None:
                     # Get unique prompt_ids from the current batch
                     batch_prompt_ids = batch.non_tensor_batch["prompt_id"]
                     unique_prompt_ids = np.unique(batch_prompt_ids)
                     
                     # Filter dataframe to only include prompts from current batch
-                    batch_df = train_dataset.dataframe[train_dataset.dataframe['prompt_id'].isin(unique_prompt_ids)]
+                    batch_df = self.train_dataset.dataframe[self.train_dataset.dataframe['prompt_id'].isin(unique_prompt_ids)]
                     
                     if len(batch_df) > 0:
                         metrics.update({

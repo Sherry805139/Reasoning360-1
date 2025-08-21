@@ -208,7 +208,7 @@ class vLLMRollout(BaseRollout):
         for k in config.keys():
             if hasattr(SamplingParams(), str(k)):
                 kwargs[k] = config.get(k)
-
+        kwargs['n'] = 1
         print(f"kwargs by 360 (SPMD): {kwargs}")
 
         # Preserve the n value for deterministic expansion (needed for both paths)
