@@ -72,17 +72,17 @@ barc_train_path=${TRAIN_DATA_DIR}/logic__barc_3.4k.parquet
 graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_1.4k.parquet
 ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_2.9k.parquet
 zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_5.0k.parquet
-reasoning_gym_train_path=${TRAIN_DATA_DIR}/reasoning_gym.parquet
-synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_train_12.9k.parquet
+reasoning_gym_train_path=${TRAIN_DATA_DIR}/logic__reasoning_gym_40.6k.parquet
+synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_12.1k.parquet
 
 # Logic (test)
 zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
 # ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150.parquet
-reasoning_gym_test_path=${TEST_DATA_DIR}/reasoning_gym_test.parquet
-synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_test_1.4k.parquet
+reasoning_gym_test_path=${TEST_DATA_DIR}/logic__reasoning_gym_430.parquet
+synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_1.4k.parquet
 
 # Simulation (train)
-codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k_12.1k.parquet
+codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_fixed_12.1k.parquet
 # Simulation (test)
 codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_200.parquet
 arcagi1_test_path=${TEST_DATA_DIR}/simulation__cruxeval-i_800.parquet
@@ -96,15 +96,20 @@ hitab_test_path=${TEST_DATA_DIR}/table__hitab_1k.parquet
 
 # Stem (train)
 webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_31.7k.parquet
-nemotron_train_path=${TRAIN_DATA_DIR}/nemotron_stem_90k.parquet
+nemotron_train_path=${TRAIN_DATA_DIR}/stem__nemotron_13.3k.parquet
 # Stem (test)
-nemotron_test_path=${TEST_DATA_DIR}/nemotron_stem_test.parquet
+nemotron_test_path=${TEST_DATA_DIR}/stem__nemotron_1000.parquet
+
+# IFbench (train)
+ifbench_train_path=${TRAIN_DATA_DIR}/ifbench__fixed_85.6k.parquet
+# IFbench (test)
+ifbench_test_path=${TEST_DATA_DIR}/ifbench_800.parquet
 
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_1k.parquet
 
-train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${reasoning_gym_train_path}','${synlogic_train_path}','${codeio_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${webinstruct_train_path}','${nemotron_train_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${reasoning_gym_train_path}','${synlogic_train_path}','${codeio_train_path}','${ifbench_train_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${webinstruct_train_path}','${nemotron_train_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${ifbench_test_path}']"  # Use math as example, add to more tasks as needed
 
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
