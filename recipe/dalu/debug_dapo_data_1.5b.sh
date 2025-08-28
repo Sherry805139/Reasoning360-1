@@ -45,8 +45,8 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 #TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/postprocessed_dedup_am
-TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/0827_data
-TEST_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/test/raw_haonan
+TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/filtered_dedup_am_12k
+TEST_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/test/raw_haonan_12k
 
 # Math (train)
 math_train1_path=${TRAIN_DATA_DIR}/math__combined_118.2k.part1.parquet
@@ -109,14 +109,16 @@ ifbench_test_path=${TEST_DATA_DIR}/ifbench_800.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_1k.parquet
 
-train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${synlogic_train_path}','${codeio_train_path}','${webinstruct_train_path}','${hitab_train_path}','${multihier_train_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${synlogic_train_path}','${codeio_train_path}','${webinstruct_train_path}','${hitab_train_path}','${multihier_train_path}','${nemotron_train_path}','${reasoning_gym_train_path}','${ifbench_train_path}']"  # Use math as example, add to more tasks as needed
 
 
-test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${ifbench_test_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${livecodebench_test_path}','${humaneval_test_path}','${mbpp_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${ifbench_test_path}']"  # Use math as example, add to more tasks as needed
 
 # '${nemotron_train_path}'
 # '${reasoning_gym_train_path}',
 # '${ifbench_train_path}'
+
+#
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 CONDA_BIN_PATH=/mnt/weka/home/liqun.ma/miniconda3/envs/Reasoning360/bin/
@@ -185,10 +187,10 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=8  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
-train_prompt_mini_bsz=32  # model grad update batchsize
+n_resp_per_prompt=4
+train_prompt_mini_bsz=8  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
@@ -294,7 +296,7 @@ offload=True
     trainer.resume_mode=auto \
     trainer.max_actor_ckpt_to_keep=2 \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.enable_budget=True \
+    +trainer.enable_budget=False \
     +data.dynamic_filtering=True \
     +data.pass_rate_upper_bound=1 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate
