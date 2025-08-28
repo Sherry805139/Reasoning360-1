@@ -13,9 +13,11 @@ def _check_single_answer(answer: str, ground_truth: str) -> bool:
         return math.is_equiv(answer, ground_truth)
 
 def drop_latex_text(answer: str) -> str:
-    # Remove \\text{} from "20 \\text{to} 39". There could be multiple \\text{} in the answer.
+    # Remove \text{} from "20 \text{to} 39". There could be multiple \text{} in the answer.
     # Replace \text{something} with something
-    answer = re.sub(r'\\\\text\{([^}]*)\}', r'\1', answer)
+    # Handle both single and double backslash cases
+    answer = re.sub(r'\\\\text\{([^}]*)\}', r'\1', answer)  # Double backslash
+    answer = re.sub(r'\\text\{([^}]*)\}', r'\1', answer)    # Single backslash
     answer = re.sub(r'\\\\', r'', answer)
     return answer
     
@@ -32,7 +34,7 @@ def compute_score(model_output: str, ground_truth: str, extra_info: any = None) 
     else:
         answer = solution_str
 
-    # print(f">>> {answer}, {ground_truth}")
+    # print(f">>> answer: '{answer}', ground_truth: '{ground_truth}'")
     if "|" not in ground_truth:
         # Single numeric answer
         score = _check_single_answer(answer, ground_truth)

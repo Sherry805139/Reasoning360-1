@@ -1,4 +1,5 @@
 import reasoning_gym
+from reasoning_gym.utils import extract_answer
 import json
 import re
 
@@ -80,7 +81,18 @@ def compute_score(solution_str, ground_truth, extra_info=None, item=None):
             entry["metadata"]["item"] = item
 
     # 6. Extract clean answer from solution_str
-    clean_answer = extract_answer_from_solution(solution_str)
+    # Step 1: First extract the answer part from our custom format (remove <think> blocks, etc.)
+    answer_part = extract_answer_from_solution(solution_str)
+    
+    # Step 2: Pass the extracted answer part to official reasoning gym function for standardization
+    official_answer = extract_answer(answer_part)
+    
+    # Step 3: Use official answer if available, otherwise use our extracted answer
+    if official_answer is not None:
+        clean_answer = official_answer
+    else:
+        # Fallback: if official function can't extract, use our extracted answer
+        clean_answer = answer_part
     
     # 7. Scoring with task-specific fixes
     debug_log_path = "reasoning_gym_debug.log"
@@ -146,6 +158,41 @@ def apply_task_specific_corrections(task, solution_str, ground_truth, raw_score)
     return raw_score
 
 
+def extract_answer_from_solution(solution_str):
+    """
+    Extract the final answer from a solution string that may contain <think> and <answer> tags.
+    
+    Args:
+        solution_str (str): The full solution string from the model
+        
+    Returns:
+        str: The extracted answer, or the original string if no answer tags found
+    """
+    # Try to extract from <answer> tags first
+    # Use a more restrictive pattern that doesn't match across multiple </answer> tags
+    answer_pattern = r'<answer>\s*([^<]*?)\s*</answer>'
+    matches = re.findall(answer_pattern, solution_str, re.IGNORECASE)
+    
+    if matches:
+        # Return the last answer if multiple found
+        return matches[-1].strip()
+    
+    # If no <answer> tags, try to extract everything after the last </think> tag
+    if '</think>' in solution_str:
+        parts = solution_str.split('</think>')
+        if len(parts) > 1:
+            # Get everything after the last </think>
+            answer = parts[-1].strip()
+            # Remove any remaining HTML-like tags
+            answer = re.sub(r'<[^>]+>', '', answer).strip()
+            if answer:
+                return answer
+    
+    # If no structured format found, return the original string
+    # This handles cases where the model generates direct answers without tags
+    return solution_str.strip()
+
+
 def is_valid_puzzle24_format(solution_str):
     """
     Check if a solution string follows a valid puzzle24 format.
@@ -170,36 +217,3 @@ def is_valid_puzzle24_format(solution_str):
     return bool(has_operators and has_numbers)
 
 
-def extract_answer_from_solution(solution_str):
-    """
-    Extract the final answer from a solution string that may contain <think> and <answer> tags.
-    
-    Args:
-        solution_str (str): The full solution string from the model
-        
-    Returns:
-        str: The extracted answer, or the original string if no answer tags found
-    """
-    # Try to extract from <answer> tags first
-    answer_pattern = r'<answer>\s*(.*?)\s*</answer>'
-    matches = re.findall(answer_pattern, solution_str, re.DOTALL | re.IGNORECASE)
-    
-    if matches:
-        # Return the last answer if multiple found
-        return matches[-1].strip()
-    
-    # If no <answer> tags, try to extract everything after the last <think> block
-    think_pattern = r'</think>\s*(.*?)$'
-    think_matches = re.findall(think_pattern, solution_str, re.DOTALL | re.IGNORECASE)
-    
-    if think_matches:
-        # Clean up any remaining tags
-        answer = think_matches[-1].strip()
-        # Remove any remaining HTML-like tags
-        answer = re.sub(r'<[^>]+>', '', answer).strip()
-        if answer:
-            return answer
-    
-    # If no structured format found, return the original string
-    # This handles cases where the model generates direct answers without tags
-    return solution_str.strip()

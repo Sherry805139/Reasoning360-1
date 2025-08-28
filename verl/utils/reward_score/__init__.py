@@ -113,6 +113,13 @@ def default_compute_score(
     elif data_source in ["ood__ifbench"]:
         from . import ifbench
         res = ifbench.compute_score(solution_str, ground_truth, extra_info=extra_info)
+    elif data_source in ["deepmath", "DeepMath", "zwhe99/DeepMath-103K"]:
+        from . import deepmath
+        res = deepmath.compute_score(solution_str, ground_truth, extra_info=extra_info)
+    elif data_source in ["stem_nemotron", "nemotron_stem"]:
+        from . import nemotron_stem
+        res = nemotron_stem.compute_score(solution_str, ground_truth, extra_info=extra_info)
+
     # NOTE: above is added by Reasoning360
     elif data_source == "openai/gsm8k":
         from . import gsm8k
