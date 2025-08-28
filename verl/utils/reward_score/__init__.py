@@ -174,6 +174,19 @@ def default_compute_score(
         from . import search_r1_like_qa_em
 
         res = search_r1_like_qa_em.compute_score(solution_str, ground_truth)
+        
+    elif data_source.startswith("synlogic"):
+        from .synlogic.synlogic import verifier_classes
+        from .synlogic.data import Data
+        
+        form_solution = solution_str.strip().split('</think>')[-1].strip()
+        data = Data.from_json_str(extra_info["game_data_str"])
+        verifier = verifier_classes[data_source.replace("synlogic_", "")]()
+        res = verifier.verify(data, form_solution)
+        if res:
+            res = 1.0
+        else:
+            res = 0.0
 
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")

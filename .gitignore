@@ -159,7 +159,9 @@ artifacts/
 
 # Analysis
 analysis/
-data_preprocess/data_inspection.ipynb
 
+data_preprocess/data_inspection.ipynb
 wandb/
 outputs/
+slurm/
+
