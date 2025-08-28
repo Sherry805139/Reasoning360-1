@@ -15,7 +15,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.0.93:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="http://10.24.0.154:8765"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -26,6 +26,7 @@ export NCCL_IB_HCA=mlx5
 export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export CUDA_LAUNCH_BLOCKING=1
+export VERL_LOGGING_LEVEL=DEBUG
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -44,7 +45,7 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 #TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/postprocessed_dedup_am
-TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/filtered_dedup_am
+TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/0827_data
 TEST_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/test/raw_haonan
 
 # Math (train)
@@ -108,12 +109,17 @@ ifbench_test_path=${TEST_DATA_DIR}/ifbench_800.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_1k.parquet
 
-train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${reasoning_gym_train_path}','${synlogic_train_path}','${codeio_train_path}','${ifbench_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${webinstruct_train_path}','${nemotron_train_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${ifbench_test_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train1_path}','${math_train2_path}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${synlogic_train_path}','${codeio_train_path}','${webinstruct_train_path}','${hitab_train_path}','${multihier_train_path}']"  # Use math as example, add to more tasks as needed
 
+
+test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${codeio_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${ifbench_test_path}']"  # Use math as example, add to more tasks as needed
+
+# '${nemotron_train_path}'
+# '${reasoning_gym_train_path}',
+# '${ifbench_train_path}'
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/mnt/weka/home/liqun.ma/miniconda3/envs/Reasoning360/bin/
 
 # =================== Logging ===================
 WANDB_PROJECT=DALU
