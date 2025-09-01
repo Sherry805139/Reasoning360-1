@@ -198,9 +198,9 @@ top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Training config
-sp_size=1
-gen_tp=4
-gen_max_num_seqs=1024
+sp_size=4
+gen_tp=1
+gen_max_num_seqs=256
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True

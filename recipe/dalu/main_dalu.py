@@ -26,7 +26,8 @@ from verl.trainer.ppo.reward import load_reward_manager
 from verl.utils.device import is_cuda_available
 
 from .dalu_ray_trainer import RayDALUTrainer
-
+import sys
+sys.set_int_max_str_digits(10000)
 
 @hydra.main(config_path="config", config_name="dalu_trainer", version_base=None)
 def main(config):
