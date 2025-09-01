@@ -121,7 +121,7 @@ test_files="['${math_test_path}','${aime25_test_path}','${aime_test_path}','${li
 #
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-CONDA_BIN_PATH=/mnt/weka/home/liqun.ma/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
 
 # =================== Logging ===================
 WANDB_PROJECT=DALU
