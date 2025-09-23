@@ -82,6 +82,26 @@ def parse_args():
 
 @dataclass
 class ModelMergerConfig:
+    """Configuration for model merger operations.
+
+    Args:
+        operation (str): Operation type - 'merge' or 'test'.
+        backend (str): Backend type for the model ('fsdp' or 'megatron').
+        target_dir (Optional[str]): Directory to save the merged huggingface model. Defaults to "tmp".
+        hf_upload_path (Optional[str]): Hugging Face repository ID to upload the model. Defaults to None.
+        private (bool): Whether to upload the model to a private Hugging Face repository. Defaults to False.
+        test_hf_dir (Optional[str]): Path to the reference Hugging Face model directory for testing. Defaults to None.
+        tie_word_embedding (bool): Whether to tie word embedding weights (currently only Megatron
+            supported). Defaults to False.
+        trust_remote_code (bool): Whether to trust remote code. Defaults to False.
+        is_value_model (bool): Whether the model is a value model (currently only Megatron
+            supported). Defaults to False.
+        local_dir (Optional[str]): Path to the saved model checkpoints. Defaults to None.
+        hf_model_config_path (Optional[str]): Path to HuggingFace model configuration files. Defaults to None.
+        hf_upload (bool): Whether to upload to HuggingFace (computed automatically). Not for initialization.
+        use_cpu_initialization (bool): Whether to use CPU initialization for large models. Defaults to False.
+    """
+
     operation: str  # 'merge' or 'test'
     backend: str
     target_dir: Optional[str] = "tmp"
@@ -169,14 +189,31 @@ class BaseModelMerger(ABC):
         )
 
     def get_transformers_auto_model_class(self):
-        if "ForTokenClassification" in self.model_config.architectures[0]:
-            return AutoModelForTokenClassification
-        elif "ForCausalLM" in self.model_config.architectures[0]:
-            return AutoModelForCausalLM
-        elif "ForConditionalGeneration" in self.model_config.architectures[0]:
-            return AutoModelForVision2Seq
+        has_remote_code = hasattr(self.model_config, "auto_map") and any(
+            self.model_config.architectures[0] in val for val in self.model_config.auto_map.values()
+        )
+        if has_remote_code:
+            auto_class = next(
+                k for k, v in self.model_config.auto_map.items() if self.model_config.architectures[0] in v
+            )
+            match auto_class:
+                case "AutoModelForCausalLM":
+                    return AutoModelForCausalLM
+                case "AutoModelForTokenClassification":
+                    return AutoModelForTokenClassification
+                case "AutoModelForVision2Seq":
+                    return AutoModelForVision2Seq
+                case _:
+                    raise NotImplementedError(f"Unknown auto class {auto_class}")
+        else:
+            if "ForTokenClassification" in self.model_config.architectures[0]:
+                return AutoModelForTokenClassification
+            elif "ForCausalLM" in self.model_config.architectures[0]:
+                return AutoModelForCausalLM
+            elif "ForConditionalGeneration" in self.model_config.architectures[0]:
+                return AutoModelForVision2Seq
 
-        raise NotImplementedError(f"Unknown architecture {self.model_config.architectures}")
+            raise NotImplementedError(f"Unknown architecture {self.model_config.architectures}")
 
     def patch_model_generation_config(self, model):
         """

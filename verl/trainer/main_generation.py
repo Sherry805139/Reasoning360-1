@@ -15,8 +15,8 @@
 Generate responses given a dataset of prompts
 """
 
-import json
 import os
+import json
 
 import hydra
 import numpy as np
@@ -40,7 +40,7 @@ from verl.utils.hdfs_io import makedirs
 from verl.utils.model import compute_position_id_with_mask
 from verl.workers.fsdp_workers import ActorRolloutRefWorker
 
-
+# NOTE: added by Reasoning360
 def merge_responses(responses):
     """Merge multiple response lists into one"""
     merged = []
@@ -49,6 +49,7 @@ def merge_responses(responses):
     return merged
 
 
+# NOTE: added by Reasoning360
 def extract_content(p):
     """Extract content from prompt (handle both string and list formats)"""
     if isinstance(p, str):
@@ -60,7 +61,7 @@ def extract_content(p):
         return p[0].get("content", "")
     return str(p)
 
-
+# NOTE: added by Reasoning360
 def merge_aime_responses(dataset, output_lst, prompt_key="prompt", response_key="responses"):
     """Merge responses for AIME dataset based on prompt content"""
     # Convert to pandas DataFrame if it's not already
@@ -105,10 +106,13 @@ def main(config):
 def run_generation(config) -> None:
     if not ray.is_initialized():
         # this is for local ray cluster
-        ray.init(
-            runtime_env={"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN"}},
-            num_cpus=config.ray_init.num_cpus,
-        )
+        default_runtime_env = {"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN"}}
+        ray_init_kwargs = config.ray_kwargs.get("ray_init", {})
+        runtime_env_kwargs = ray_init_kwargs.get("runtime_env", {})
+        runtime_env = OmegaConf.merge(default_runtime_env, runtime_env_kwargs)
+        ray_init_kwargs = OmegaConf.create({**ray_init_kwargs, "runtime_env": runtime_env})
+        print(f"ray init kwargs: {ray_init_kwargs}")
+        ray.init(**OmegaConf.to_container(ray_init_kwargs))
 
     ray.get(main_task.remote(config))
 
@@ -149,6 +153,10 @@ def main_task(config):
     assert config.data.n_samples >= 1, "n_samples should always >= 1"
 
     # read dataset. Note that the dataset should directly contain chat template format (e.g., a list of dictionary)
+    # dataset = pd.read_parquet(config.data.path)
+    # chat_lst = dataset[config.data.prompt_key].tolist()
+
+    # NOTE: modified by Reasoning360
     is_polars_df = False
     if "livecodebench" in config.data.path:
         import polars as pl
@@ -169,6 +177,8 @@ def main_task(config):
         chat_lst = chat_lst * config.data.n_samples
         ground_truth_lst = ground_truth_lst * config.data.n_samples
 
+    chat_lst = [chat.tolist() for chat in chat_lst]
+
     tokenizer.padding_side = "left"
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -182,17 +192,11 @@ def main_task(config):
     )
     wg.init_model()
 
-    # NOTE: updated by Reasoning360. Sample n times together
+    # NOTE: the following is modified by Reasoning360.
     total_samples = len(chat_lst)  # chat_lst is repeated
     config_batch_size = config.data.batch_size
     num_batch = -(-total_samples // config_batch_size)
-
     output_lst = []
-
-    # total_samples = len(dataset)
-    # config_batch_size = config.data.batch_size
-    # num_batch = -(-total_samples // config_batch_size)
-    # output_lst = [[] for _ in range(config.data.n_samples)]
 
     for batch_idx in range(num_batch):
         print(f"[{batch_idx + 1}/{num_batch}] Start to process.")
@@ -297,6 +301,63 @@ def main_task(config):
         model_name = config.model.path.split("/")[-1]
         with open(config.data.output_path.replace(".parquet", f"_{model_name}.json"), "w", encoding="utf-8") as f:
             json.dump(result_list, f, indent=2, ensure_ascii=False)
+
+    # total_samples = len(dataset)
+    # config_batch_size = config.data.batch_size
+    # apply_chat_template_kwargs = config.data.get("apply_chat_template_kwargs", {})
+    # num_batch = -(-total_samples // config_batch_size)
+    # output_lst = [[] for _ in range(config.data.n_samples)]
+
+    # for batch_idx in range(num_batch):
+    #     print(f"[{batch_idx + 1}/{num_batch}] Start to process.")
+    #     batch_chat_lst = chat_lst[batch_idx * config_batch_size : (batch_idx + 1) * config_batch_size]
+    #     inputs = tokenizer.apply_chat_template(
+    #         batch_chat_lst,
+    #         add_generation_prompt=True,
+    #         padding=True,
+    #         truncation=True,
+    #         max_length=config.rollout.prompt_length,
+    #         return_tensors="pt",
+    #         return_dict=True,
+    #         tokenize=True,
+    #         **apply_chat_template_kwargs,
+    #     )
+    #     input_ids = inputs["input_ids"]
+    #     attention_mask = inputs["attention_mask"]
+    #     position_ids = compute_position_id_with_mask(attention_mask)
+    #     batch_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "position_ids": position_ids}
+
+    #     data = DataProto.from_dict(batch_dict)
+    #     data_padded, pad_size = pad_dataproto_to_divisor(data, wg.world_size)
+
+    #     # START TO GENERATE FOR n_samples TIMES
+    #     print(f"[{batch_idx + 1}/{num_batch}] Start to generate.")
+    #     for n_sample in range(config.data.n_samples):
+    #         output_padded = wg.generate_sequences(data_padded)
+    #         output = unpad_dataproto(output_padded, pad_size=pad_size)
+
+    #         output_texts = []
+    #         for i in range(len(output)):
+    #             data_item = output[i]
+    #             prompt_length = data_item.batch["prompts"].shape[-1]
+    #             valid_response_length = data_item.batch["attention_mask"][prompt_length:].sum()
+    #             valid_response_ids = data_item.batch["responses"][:valid_response_length]
+    #             response_str = tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+    #             output_texts.append(response_str)
+
+    #         output_lst[n_sample].extend(output_texts)
+
+    # # convert output_lst from (n_samples, n_data) to (n_data, n_sampels)
+    # output_lst = np.array(output_lst, dtype=object)
+    # output_lst = np.transpose(output_lst, axes=(1, 0)).tolist()
+
+    # # add to the data frame
+    # dataset["responses"] = output_lst
+
+    # # write to a new parquet
+    # output_dir = os.path.dirname(config.data.output_path)
+    # makedirs(output_dir, exist_ok=True)
+    # dataset.to_parquet(config.data.output_path)
 
 
 if __name__ == "__main__":

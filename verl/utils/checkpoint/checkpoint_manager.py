@@ -15,8 +15,6 @@
 import os
 import random
 import shutil
-import tempfile
-from filelock import FileLock
 
 import numpy as np
 import torch
@@ -24,17 +22,17 @@ import torch.distributed
 from omegaconf import DictConfig
 from transformers import PreTrainedTokenizer, ProcessorMixin
 
+from verl.trainer.config import CheckpointConfig
 from verl.utils.device import get_device_name, get_torch_device
 
 
 class BaseCheckpointManager:
     """
-    A checkpoint manager that saves and loads
+    A checkpoint manager that saves and loads the following states in a SPMD way:
     - model
     - optimizer
     - lr_scheduler
     - extra_states
-    in a SPMD way.
 
     We save
     - sharded model states and optimizer states
@@ -48,7 +46,7 @@ class BaseCheckpointManager:
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None,
         processing_class: PreTrainedTokenizer | ProcessorMixin = None,
-        checkpoint_config: DictConfig = None,
+        checkpoint_config: DictConfig | CheckpointConfig = None,
     ):
         self.checkpoint_config = checkpoint_config
         checkpoint_load_contents = checkpoint_config.get("load_contents", None) if checkpoint_config else None
@@ -142,27 +140,6 @@ class BaseCheckpointManager:
             if not os.path.exists(abs_path):
                 continue
             shutil.rmtree(abs_path, ignore_errors=True)
-    
-    @staticmethod
-    def local_mkdir(path):
-        if not os.path.isabs(path):
-            working_dir = os.getcwd()
-            path = os.path.join(working_dir, path)
-
-        # Using hash value of path as lock file name to avoid long file name
-        lock_filename = f"ckpt_{hash(path) & 0xFFFFFFFF:08x}.lock"
-        lock_path = os.path.join(tempfile.gettempdir(), lock_filename)
-
-        try:
-            with FileLock(lock_path, timeout=60):  # Add timeout
-                # make a new dir
-                os.makedirs(path, exist_ok=True)
-        except Exception as e:
-            print(f"Warning: Failed to acquire lock for {path}: {e}")
-            # Even if the lock is not acquired, try to create the directory
-            os.makedirs(path, exist_ok=True)
-
-        return path
 
     @staticmethod
     def get_rng_state():

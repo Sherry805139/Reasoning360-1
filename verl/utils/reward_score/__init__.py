@@ -47,6 +47,9 @@ def default_compute_score(
 
     # math
     if data_source.startswith("math"):
+        # # TODO: remove this after testing
+        # # added by @nightlessbaron for infra tests
+        # reward_metric = "math_dapo"
         if reward_metric == "prime_math":
             from . import prime_math
             res = prime_math.compute_score(solution_str, ground_truth)
@@ -55,6 +58,9 @@ def default_compute_score(
             res = math_llm_judge.compute_score(
                 solution_str, ground_truth, extra_info=extra_info
             )
+        elif reward_metric == "math_dapo":
+            from . import math_dapo
+            res = math_dapo.compute_score(solution_str, ground_truth)
         else:
             # Default
             from . import naive_dapo

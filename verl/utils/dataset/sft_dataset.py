@@ -45,6 +45,7 @@ class SFTDataset(Dataset):
         max_length = config.get("max_length", 1024)
         truncation = config.get("truncation", "error")
         use_shm = config.get("use_shm", False)
+        self.apply_chat_template_kwargs = config.get("apply_chat_template_kwargs", {})
 
         assert truncation in ["error", "left", "right"]
         self.truncation = truncation
@@ -125,13 +126,15 @@ class SFTDataset(Dataset):
         system_prompt = "Please reason step by step, and put your final answer within \\boxed{}."
         prompt_chat = [
             {"role": "system", "content": system_prompt},
-            {'role': 'user', 'content': prompt}
-            ]
+            {"role": "user", "content": prompt}
+        ]
         # prompt_chat = [{"role": "user", "content": prompt}]
 
         # string
-        prompt_chat_str = tokenizer.apply_chat_template(prompt_chat, add_generation_prompt=True, tokenize=False)
-        response_chat_str = response + tokenizer.eos_token # TODO: eos_token is <|im_end|>, should be <|endoftext|>
+        prompt_chat_str = tokenizer.apply_chat_template(
+            prompt_chat, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
+        )
+        response_chat_str = response + tokenizer.eos_token
 
         # tokenize
         prompt_ids_output = tokenizer(prompt_chat_str, return_tensors="pt", add_special_tokens=False)

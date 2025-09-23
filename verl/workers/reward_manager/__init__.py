@@ -17,8 +17,7 @@ from .batch import BatchRewardManager
 from .dapo import DAPORewardManager
 from .naive import NaiveRewardManager
 from .prime import PrimeRewardManager
-
-# Added by Reasoning360
+# NOTE: added by Reasoning360
 from .naive_parallel import NaiveParallelRewardManager
 from .async_mp import AsyncMultiProcessRewardManager
 from .llm_judge import LLMJudgeRewardManager
@@ -29,10 +28,9 @@ __all__ = [
     "DAPORewardManager",
     "NaiveRewardManager",
     "PrimeRewardManager",
-    "register",
-    "get_reward_manager_cls",
-    # Added by Reasoning360
     "NaiveParallelRewardManager",
     "AsyncMultiProcessRewardManager",
     "LLMJudgeRewardManager",
+    "register",
+    "get_reward_manager_cls",
 ]
