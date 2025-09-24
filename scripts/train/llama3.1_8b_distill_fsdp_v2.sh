@@ -19,17 +19,26 @@ export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill i
 
 # =================== Cluster Environment ===================
 export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl/bin/
-export NCCL_DEBUG=info
-export NCCL_ALGO=NVLSTree
-export NCCL_IBEXT_DISABLE=1
-export NCCL_NVLS_ENABLE=1
-export NCCL_IB_HCA=mlx5
-export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
-export CUDA_DEVICE_MAX_CONNECTIONS=1
-export CUDA_LAUNCH_BLOCKING=1
-export NCCL_TIMEOUT_MS=4800000
-export NUMEXPR_MAX_THREADS=96
 export ROCR_VISIBLE_DEVICES=None
+export NCCL_TIMEOUT_MS=4800000
+export OMPI_MCA_coll_hcoll_enable=0 \
+CUDA_DEVICE_ORDER=PCI_BUS_ID \
+NCCL_SOCKET_IFNAME=eth0 \
+UCX_TLS=rc \
+UCX_NET_DEVICES=mlx5_ib0:1 \
+NCCL_DEBUG=WARN \
+NCCL_TOPO_FILE=/opt/microsoft/ndv5-topo.xml \
+NCCL_IB_PCI_RELAXED_ORDERING=1 \
+NCCL_IB_QPS_PER_CONNECTION=4 \
+NCCL_IGNORE_CPU_AFFINITY=1 \
+NCCL_P2P_NET_CHUNKSIZE=$((512 * 1024)) \
+NCCL_PXN_DISABLE=1 \
+NCCL_MIN_NCHANNELS=32 \
+SHARP_SMX_UCX_INTERFACE=mlx5_ib0:1 \
+SHARP_COLL_ENABLE_SAT=1 \
+SHARP_COLL_LOG_LEVEL=3 \
+SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
+NCCL_COLLNET_ENABLE=1
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
