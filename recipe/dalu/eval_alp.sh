@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=dalu-1.5b
-#SBATCH --nodes=4
-#SBATCH --ntasks=4
+#SBATCH --job-name=eval-math-1.5b-alp
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=128
-#SBATCH --mem=0
+#SBATCH --mem=1024G
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
 #SBATCH --exclusive
@@ -18,14 +18,15 @@ RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from,
 export STEM_LLM_JUDGE_URL="http://10.24.0.93:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
-export NCCL_DEBUG=info
-export NCCL_ALGO=NVLSTree
-export NCCL_IBEXT_DISABLE=1
+export NCCL_DEBUG=warn
+export NCCL_NET=IB
+export NCCL_IB_HCA="mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
+export NCCL_CROSS_NIC=1            # let NCCL stripe across rails
+export NCCL_IB_TC=136
+
+export NCCL_SOCKET_IFNAME="^lo,docker,virbr"
+export CUDA_DEVICE_MAX_CONNECTIONS=8
 export NCCL_NVLS_ENABLE=1
-export NCCL_IB_HCA=mlx5
-export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
-export CUDA_DEVICE_MAX_CONNECTIONS=1
-export CUDA_LAUNCH_BLOCKING=1
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -43,79 +44,34 @@ export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
-#TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/postprocessed_dedup_am
-TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/filtered_dedup_am
-TEST_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/test/raw_haonan
+TRAIN_DATA_DIR=/mnt/sharefs/users/chengqian.gao/dalu/train
+TEST_DATA_DIR=/mnt/sharefs/users/chengqian.gao/dalu/eval
 
 # Math (train)
-math_train1_path=${TRAIN_DATA_DIR}/math__combined_118.2k.part1.parquet
-math_train2_path=${TRAIN_DATA_DIR}/math__combined_118.2k.part2.parquet
-# Math (test)
-math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
-aime25_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
-aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__deepscaler_train_8k.parquet
 
-# Code (train)
-leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
-livecodebench_train_path=${TRAIN_DATA_DIR}/codegen__livecodebench_440.parquet
-primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__primeintellect_7.5k.parquet
-taco_train_path=${TRAIN_DATA_DIR}/codegen__taco_8.8k.parquet
-# Code (test)
-humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
-livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
+# Test (test)
+test_aime24=${TEST_DATA_DIR}/aime24_x8.parquet
+test_math500=${TEST_DATA_DIR}/math_500_x4.parquet
+test_minervamath=${TEST_DATA_DIR}/minervamath_x4.parquet
+test_amc23=${TEST_DATA_DIR}/amc23_x4.parquet
+test_olympiadbench=${TEST_DATA_DIR}/olympiadbench_x4.parquet
 
-# Logic (train)
-arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_111.parquet
-arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_190.parquet
-barc_train_path=${TRAIN_DATA_DIR}/logic__barc_1.6k.parquet
-graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_1.2k.parquet
-ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_1.9k.parquet
-zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_1.3k.parquet
-reasoning_gym_train_path=${TRAIN_DATA_DIR}/reasoning_gym.parquet
-synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_train_12.9k.parquet
 
-# Logic (test)
-zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300.parquet
-ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150.parquet
-reasoning_gym_test_path=${TEST_DATA_DIR}/reasoning_gym_test.parquet
-synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_test_1.4k.parquet
-
-# Simulation (train)
-codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_3.7k.parquet
-# Simulation (test)
-codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500.parquet
-arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
-
-# Table (train)
-hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
-multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
-# Table (test)
-multihier_test_path=${TEST_DATA_DIR}/table__multihier_300.parquet
-hitab_test_path=${TEST_DATA_DIR}/table__hitab_300.parquet
-
-# Stem (train)
-webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
-nemotron_train_path=${TRAIN_DATA_DIR}/nemotron_stem_90k.parquet
-# Stem (test)
-nemotron_test_path=${TRAIN_DATA_DIR}/nemotron_stem_test.parquet
-
-gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
-supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
-
-train_files="['${math_train1_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}','${aime25_test_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train_path}']"
+test_files="['${test_aime24}', '${test_math500}', '${test_minervamath}', '${test_amc23}', '${test_olympiadbench}' ]"
 
 # =================== Model ===================
-BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
-CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
+BASE_MODEL=SynthLabsAI/ALP_R1_Qwen1.5B
+CONDA_BIN_PATH=/mnt/weka/home/chengqian.gao/.envs/reasoning360/bin/
 
 # =================== Logging ===================
-WANDB_PROJECT=Reasoning360-1.5B-Distill
-WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
+WANDB_PROJECT=DALU
+export WANDB_ENTITY=gaochqian
+WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}
 
 # Set default local directory for checkpoints
-DEFAULT_LOCAL_DIR="checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
+DEFAULT_LOCAL_DIR="/mnt/sharefs/users/chengqian.gao/checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -161,10 +117,10 @@ use_kl_loss=False
 kl_loss_coef=0.0
 
 clip_ratio_low=0.2
-clip_ratio_high=0.2
+clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -174,10 +130,11 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=32  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
+n_resp_per_prompt=8
 train_prompt_mini_bsz=32  # model grad update batchsize
+
 
 # Algorithm
 temperature=1.0
@@ -186,14 +143,14 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Training config
 sp_size=1
-gen_tp=4
+gen_tp=1
 gen_max_num_seqs=1024
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # increase this to speed up modelforward, but note memory overflow
-offload=True
+offload=False
 
 # =================== Start RL training ===================
 "${CONDA_BIN_PATH}python" -m recipe.dalu.main_dalu \
@@ -253,9 +210,9 @@ offload=True
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.top_p=${top_p}\
-    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
+    actor_rollout_ref.rollout.val_kwargs.top_k=-1 \
+    actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
+    actor_rollout_ref.rollout.val_kwargs.temperature=0.6 \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
@@ -276,14 +233,15 @@ offload=True
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=10 \
+    trainer.save_freq=20 \
     trainer.test_freq=10 \
-    trainer.total_epochs=5 \
-    trainer.log_val_generations=50 \
+    trainer.total_epochs=0 \
+    trainer.log_val_generations=1 \
     trainer.resume_mode=auto \
-    trainer.max_actor_ckpt_to_keep=2 \
+    trainer.max_actor_ckpt_to_keep=300 \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.enable_budget=True \
-    +data.dynamic_filtering=True \
+    +trainer.enable_budget=False \
+    +trainer.quantile_interval=-1 \
+    +data.dynamic_filtering=False \
     +data.pass_rate_upper_bound=1 \
     +data.initial_pass_rate_column=qwen3_30b_pass_rate

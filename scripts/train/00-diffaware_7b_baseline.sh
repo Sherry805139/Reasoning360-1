@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=final-sort
+#SBATCH --job-name=diffaware-7b-baseline-24klength
 #SBATCH --partition=main
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
@@ -15,7 +15,7 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="/mnt/sharefs/users/haonan.li/Reasoning360/checkpoints/Difficulty-Aware-RL/final-sort-DeepSeek-R1-Distill-Qwen-7B-434167"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
 export STEM_LLM_JUDGE_URL="http://10.24.2.80:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -47,11 +47,13 @@ TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
 TEST_DATA_DIR=${SHARED_DATA_PATH}/offline_eval
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__deepscaler_8192.parquet
+# math_train_path=${TRAIN_DATA_DIR}/math__deepscaler_debug.parquet
+
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
-math_indistribution_test_path=${TEST_DATA_DIR}/math__combined_512.parquet
+math_indistribution_test_path=${TEST_DATA_DIR}/math__deepscaler_512.parquet
 
 # Code (train)
 leetcode_train_path=${TRAIN_DATA_DIR}/codegen__leetcode2k_1.3k.parquet
@@ -93,19 +95,19 @@ webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}', '${zebra_train_path}', '${livecodebench_train_path}', '${leetcode_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}']"  
-test_files="['${math_test_path}', '${aime_test_path}', '${math_indistribution_test_path}', '${humaneval_test_path}', '${mbpp_test_path}', '${livecodebench_test_path}', '${zebralogic_test_path}', '${ordering_puzzle_test_path}']"
+train_files="['${math_train_path}']"  
+test_files="['${math_test_path}', '${math_indistribution_test_path}']"
 
 
 # =================== Model ===================
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
-CONDA_BIN_PATH=/mnt/weka/home/haonan.li/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/mnt/weka/home/chengqian.gao/.envs/reasoning360/bin/
 # =================== Logging ===================
 WANDB_PROJECT=Difficulty-Aware-RL
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_NAME}-${BASE_MODEL##*/}-${SLURM_JOB_ID}
 
 # Set default local directory for checkpoints
-DEFAULT_LOCAL_DIR="checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
+DEFAULT_LOCAL_DIR="/mnt/sharefs/users/chengqian.gao/checkpoints/${WANDB_PROJECT}/${WANDB_EXPERIMENT_NAME}"
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
 if [[ -n "$RESUME_CKPT_DIR_NAME" ]]; then
@@ -152,12 +154,12 @@ use_kl_loss=False
 kl_loss_coef=0.0
 
 clip_ratio_low=0.2
-clip_ratio_high=0.24
+clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 28))
+max_response_length=$((1024 * 24))
 enable_overlong_buffer=False
-overlong_buffer_len=$((1024 * 4))
+overlong_buffer_len=$((1024 * 0))
 overlong_penalty_factor=1.0
 
 loss_agg_mode="token-mean"
@@ -165,25 +167,25 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
-gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
+train_prompt_bsz=128  # on-policy model update batchsize: train_prompt_bsz * rollout.n, 512 -> 16 for debugging
+gen_prompt_bsz=$((train_prompt_bsz * 4))
+n_resp_per_prompt=8
 train_prompt_mini_bsz=32  # model grad update batchsize
 
 # Algorithm
-temperature=1.0
-top_p=1.0
+temperature=0.6
+top_p=0.95
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Mathematically equivalent
 sp_size=1
-gen_tp=4
-infer_micro_batch_size=256
-train_micro_batch_size=32
-use_dynamic_bsz=False
+gen_tp=1
+infer_micro_batch_size=null
+train_micro_batch_size=null
+use_dynamic_bsz=True
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length)))  # increase this to speed up modelforward, but note memory overflow
-offload=True
+offload=False
 
 # =================== Start RL training ===================
 "${CONDA_BIN_PATH}python" -m verl.recipe.dapo.src.main_dapo \
@@ -201,6 +203,7 @@ offload=True
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
     data.gen_batch_size=${gen_prompt_bsz} \
+    +data.initial_pass_rate_column=qwen3_30b_pass_rate \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
@@ -241,8 +244,8 @@ offload=True
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.top_p=${top_p}\
-    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
+    actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
+    actor_rollout_ref.rollout.val_kwargs.temperature=0.6 \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
@@ -267,10 +270,8 @@ offload=True
     trainer.save_freq=10 \
     trainer.test_freq=10 \
     trainer.total_epochs=10 \
-    +trainer.val_generations_to_log_to_wandb=30 \
+    +trainer.val_generations_to_log_to_wandb=3 \
     trainer.resume_mode=auto \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
-    +trainer.enable_budget=True \
-    +data.dynamic_filtering=False \
-    +data.pass_rate_upper_bound=1 \
-    +data.initial_pass_rate_column=qwen3_30b_pass_rate
+    +trainer.dynamic_filtering=False \
+    +trainer.enable_budget=False

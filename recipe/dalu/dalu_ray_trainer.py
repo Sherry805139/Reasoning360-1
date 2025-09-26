@@ -73,42 +73,70 @@ class RayDALUTrainer(RayPPOTrainer):
             initial_pass_rate_column = self.config.data.get("initial_pass_rate_column", "qwen3_30b_pass_rate")
             self.train_dataset.dataframe["prev_pass_rate"] = self.train_dataset.dataframe[initial_pass_rate_column]
             # use half of the max response length as the average length for the first epoch
-            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4 
-            self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4
-            self.train_dataset.dataframe["prev_passed_80th_length"] = self.config.data.get("max_response_length", 1024*28)
-            self.train_dataset.dataframe["prev_passed_50th_length"] = self.config.data.get("max_response_length", 1024*28)
+            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*32)
+            self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*32)
+            self.train_dataset.dataframe["prev_passed_90th_length"] = self.config.data.get("max_response_length", 1024*32)
+            self.train_dataset.dataframe["prev_passed_80th_length"] = self.config.data.get("max_response_length", 1024*32)
+            self.train_dataset.dataframe["prev_passed_50th_length"] = self.config.data.get("max_response_length", 1024*32)
         
-        def _assign_length_budget(row, pass_rate_upper_bound, max_response_length):
+        def _assign_length_budget(row, pass_rate_upper_bound, max_response_length, quantile_interval):
             prompt_pass_rate = row['prev_pass_rate']
             passed_prompt_avg_length = row['prev_passed_avg_length']
             passed_prompt_max_length = row['prev_passed_max_length']
-            
+            passed_prompt_q9_length = row['prev_passed_90th_length']
+            passed_prompt_q8_length = row['prev_passed_80th_length']
+            passed_prompt_q5_length = row['prev_passed_50th_length']
+
             # Get configurable multipliers with default values
             perfect_pass_rate_multiplier = self.config.data.get("perfect_pass_rate_multiplier", 1.0)
             high_pass_rate_multiplier = self.config.data.get("high_pass_rate_multiplier", 0.8)
             
-            if prompt_pass_rate == 1.0:
-                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
-            elif prompt_pass_rate > pass_rate_upper_bound:
-                new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
+            if prompt_pass_rate >= pass_rate_upper_bound:
+                if quantile_interval == 0.1:
+                    new_length_budget = passed_prompt_q9_length
+                elif quantile_interval == 0.2:
+                    new_length_budget = passed_prompt_q8_length
+                elif quantile_interval == 0.5:
+                    new_length_budget = passed_prompt_q5_length
+                else:
+                    raise NotImplementedError(f"Quantile interval {quantile_interval} not implemented")
             else:
-                new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
-            
-            new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
-            new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
+                new_length_budget = self.config.data.get("max_response_length", 1024*32)
             
             return int(new_length_budget)
 
         if enable_budget:
-            max_response_length = self.config.data.get("max_response_length", 1024*28)
+            max_response_length = self.config.data.get("max_response_length", 1024*32)
             pass_rate_upper_bound = self.config.trainer.get("pass_rate_upper_bound", 1.0)
+            quantile_interval = self.config.trainer.get("quantile_interval", 0.2)
 
             self.train_dataset.dataframe["per_prompt_length_budget"] = self.train_dataset.dataframe.apply(
-                lambda row: _assign_length_budget(row, pass_rate_upper_bound, max_response_length),
+                lambda row: _assign_length_budget(row, pass_rate_upper_bound, max_response_length, quantile_interval),
                 axis=1
             )
         else:
-            self.train_dataset.dataframe["per_prompt_length_budget"] = self.config.data.get("max_response_length", 1024*28)  # Use fixed length budget
+            self.train_dataset.dataframe["per_prompt_length_budget"] = self.config.data.get("max_response_length", 1024*32)
+
+        stage_based_budgeting = self.config.data.get("stage_based_budgeting", False)
+
+        if stage_based_budgeting:
+            def _assign_stage_based_budgeting(row, epoch_idx, max_response_length):
+                if epoch_idx < 2:
+                    return max_response_length
+                elif epoch_idx < 4:
+                    return max_response_length - 1024 * stage_based_budgeting
+                elif epoch_idx < 6:
+                    return max_response_length - 1024 * stage_based_budgeting * 2
+                elif epoch_idx < 8:
+                    return max_response_length - 1024 * stage_based_budgeting * 3
+                else: 
+                    return max_response_length - 1024 * stage_based_budgeting * 4
+
+            max_response_length = self.config.data.get("max_response_length", 1024*32)
+            self.train_dataset.dataframe["per_prompt_length_budget"] = self.train_dataset.dataframe.apply(
+                lambda row: _assign_stage_based_budgeting(row, epoch_idx, max_response_length),
+                axis=1
+            )
 
         if dynamic_filtering:
             original_df = self.train_dataset.dataframe.copy()
@@ -490,6 +518,8 @@ class RayDALUTrainer(RayPPOTrainer):
                             avg_length_df.rename(columns={"response_length": "prev_passed_avg_length"}, inplace=True)
                             max_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].max().set_index('prompt_id')[['response_length']]
                             max_length_df.rename(columns={"response_length": "prev_passed_max_length"}, inplace=True)
+                            quantile_9_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.9).set_index('prompt_id')[['response_length']]
+                            quantile_9_length_df.rename(columns={"response_length": "prev_passed_90th_length"}, inplace=True)
                             quantile_8_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.8).set_index('prompt_id')[['response_length']]
                             quantile_8_length_df.rename(columns={"response_length": "prev_passed_80th_length"}, inplace=True)
                             quantile_5_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.5).set_index('prompt_id')[['response_length']]
@@ -499,16 +529,16 @@ class RayDALUTrainer(RayPPOTrainer):
                             self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
                             avg_length_df = avg_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             max_length_df = max_length_df.astype(self.train_dataset.dataframe['prev_passed_max_length'].dtypes)
+                            quantile_9_length_df = quantile_9_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             quantile_8_length_df = quantile_8_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             quantile_5_length_df = quantile_5_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             
                             self.train_dataset.dataframe.update(pass_rate_df)
                             self.train_dataset.dataframe.update(avg_length_df)
                             self.train_dataset.dataframe.update(max_length_df)
+                            self.train_dataset.dataframe.update(quantile_9_length_df)
                             self.train_dataset.dataframe.update(quantile_8_length_df)
                             self.train_dataset.dataframe.update(quantile_5_length_df)
-                            print(quantile_8_length_df, quantile_5_length_df)
-                            print(self.train_dataset.dataframe.columns)
 
                             self.train_dataset.dataframe = self.train_dataset.dataframe.reset_index()
                         else:
@@ -597,6 +627,7 @@ class RayDALUTrainer(RayPPOTrainer):
                             "train/prev_passed_avg_length_std": batch_df["prev_passed_avg_length"].std(),
                             "train/prev_passed_avg_length_min": batch_df["prev_passed_avg_length"].min(),
                             "train/prev_passed_avg_length_max": batch_df["prev_passed_avg_length"].max(),
+                            'train/prev_passed_90th_length_avg': batch_df["prev_passed_90th_length"].mean(),
                             'train/prev_passed_80th_length_avg': batch_df["prev_passed_80th_length"].mean(),
                             'train/prev_passed_80th_length_std': batch_df["prev_passed_80th_length"].std(),
                             'train/prev_passed_80th_length_min': batch_df["prev_passed_80th_length"].min(),

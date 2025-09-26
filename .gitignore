@@ -8,6 +8,8 @@
 **/*.tar.gz
 **/playground
 **/wandb
+**/slurm
+**/slurm-0921
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
