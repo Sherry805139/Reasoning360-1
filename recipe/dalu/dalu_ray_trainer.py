@@ -97,12 +97,12 @@ class RayDALUTrainer(RayPPOTrainer):
             new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
             new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
             
-            print(f"new_length_budget: {new_length_budget}")
-            print(f"max_response_length: {max_response_length}")
-            print(f"passed_prompt_max_length: {passed_prompt_max_length}")
-            print(f"passed_prompt_avg_length: {passed_prompt_avg_length}")
-            print(f"prompt_pass_rate: {prompt_pass_rate}")
-            print(f"pass_rate_upper_bound: {pass_rate_upper_bound}")
+            # print(f"new_length_budget: {new_length_budget}")
+            # print(f"max_response_length: {max_response_length}")
+            # print(f"passed_prompt_max_length: {passed_prompt_max_length}")
+            # print(f"passed_prompt_avg_length: {passed_prompt_avg_length}")
+            # print(f"prompt_pass_rate: {prompt_pass_rate}")
+            # print(f"pass_rate_upper_bound: {pass_rate_upper_bound}")
             
             return int(new_length_budget)
 
