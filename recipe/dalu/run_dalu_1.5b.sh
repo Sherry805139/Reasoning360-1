@@ -77,9 +77,9 @@ synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_12.1k.parquet
 
 # Logic (test)
 zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
-reasoning_gym_test_path=${TEST_DATA_DIR}/logic__reasoning_gym_430.parquet
+reasoning_gym_test_path=${TEST_DATA_DIR}/logic__reasoning_gym_425.parquet
 reasoning_gym_large_test_path=${TEST_DATA_DIR}/logic__reasoning_gym_4.3k.parquet
-synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_1.4k.parquet
+synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_217.parquet
 arcagi1_test_path=${TEST_DATA_DIR}/logic__arcagi1_400.parquet
 
 # Simulation (train)
