@@ -169,6 +169,10 @@ class RayDALUTrainer(RayPPOTrainer):
             print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
         else:
             filtered_df = self.train_dataset.dataframe.copy()
+        
+        # Shuffle the dataset before sorting to randomize order of samples with same pass_rate
+        # This ensures better diversity in training batches
+        filtered_df = filtered_df.sample(frac=1.0, random_state=42 + epoch_idx).reset_index(drop=True)
                 
         # Sort by per_prompt_length_budget for more efficient rollout batching
         filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
