@@ -140,7 +140,8 @@ class vLLMRollout(BaseRollout):
                 + f"max_position_embeddings={model_hf_config.max_position_embeddings}"
             )
 
-        max_model_len = int(config.max_model_len or config.prompt_length + config.response_length)
+        # max_model_len = int(config.max_model_len or config.prompt_length + config.response_length)
+        max_model_len = 1024 * (32 + 4)
 
         if max_num_batched_tokens < max_model_len and self.config.enable_chunked_prefill:
             raise ValueError(
@@ -372,7 +373,20 @@ class vLLMRollout(BaseRollout):
             print(f"vLLM rollout (SPMD): Overriding max_tokens to {response_length}")
         
         # users can customize different sampling_params at different run
-        if individual_sampling_params is not None:
+        if is_validate:
+            kwargs["max_tokens"] = 32768
+            with self.update_sampling_params(**kwargs), self.timer() as t:
+                outputs = self.inference_engine.generate(
+                    prompts=vllm_inputs,  # because we have already convert it to prompt token id
+                    sampling_params=self.sampling_params,
+                    lora_request=lora_requests,
+                    use_tqdm=False,
+                )
+            kwargs["max_tokens"] = self.config.response_length
+            self.update_sampling_params(**kwargs)
+
+        elif individual_sampling_params is not None:
+            # PALU training
             # Use context manager approach to create individual sampling params while maintaining batch efficiency
             individual_sampling_params_list = []
             
@@ -409,7 +423,9 @@ class vLLMRollout(BaseRollout):
                     use_tqdm=False,
                 )
         else:
+            # GRPO baseline training
             # Use single sampling params for all prompts (original behavior)
+            kwargs["max_tokens"] = self.config.response_length
             with self.update_sampling_params(**kwargs), self.timer() as t:
                 outputs = self.inference_engine.generate(
                     prompts=vllm_inputs,  # because we have already convert it to prompt token id
@@ -432,8 +448,12 @@ class vLLMRollout(BaseRollout):
                     curr_log_prob.append(logprob[response_ids[i]].logprob)
                 rollout_log_probs.append(curr_log_prob)
 
-        response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
-        rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
+        if is_validate:
+            response = pad_2d_list_to_length(response, self.pad_token_id, max_length=32768).to(idx.device)
+            rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=32768).to(idx.device)
+        else:
+            response = pad_2d_list_to_length(response, self.pad_token_id, max_length=self.config.response_length).to(idx.device)
+            rollout_log_probs = pad_2d_list_to_length(rollout_log_probs, -1, max_length=self.config.response_length).to(idx.device)
         rollout_log_probs = rollout_log_probs.to(torch.float32)
 
         # Check if vLLM has already expanded the batch due to n > 1
@@ -513,6 +533,19 @@ class vLLMRollout(BaseRollout):
         if per_prompt_length_budget is None:
             meta_info["target_max_response_length"] = self.config.response_length
 
+        if is_validate:
+            generated_response_lengths = response_attention_mask.sum(dim=1)   # shape: [batch_size]
+            # logging
+            print(f"Generated response lengths: {generated_response_lengths}")
+            # save them to a local dataframe:
+            import os
+            import pandas as pd 
+            job_id = os.environ.get("SLURM_JOB_ID", "nojob")  # fallback for local runs
+
+            df = pd.DataFrame({
+                "generated_response_lengths": generated_response_lengths.cpu().numpy(),
+            })
+            df.to_csv(f"./response_lengths_job{job_id}_step{prompts.meta_info['global_steps']}.csv", index=False, mode='a', header=False)
         # LLM360 (removed in latest vllm)
         # free vllm cache engine
         # if (
