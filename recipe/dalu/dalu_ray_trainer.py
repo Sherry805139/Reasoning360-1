@@ -213,6 +213,7 @@ class RayDALUTrainer(RayPPOTrainer):
             experiment_name=self.config.trainer.experiment_name,
             default_backend=self.config.trainer.logger,
             config=OmegaConf.to_container(self.config, resolve=True),
+            run_id=self.config.trainer.get("run_id", ""),
         )
 
         self.global_steps = 0
