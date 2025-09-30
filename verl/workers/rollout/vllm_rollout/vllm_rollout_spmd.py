@@ -140,8 +140,8 @@ class vLLMRollout(BaseRollout):
                 + f"max_position_embeddings={model_hf_config.max_position_embeddings}"
             )
 
-        # max_model_len = int(config.max_model_len or config.prompt_length + config.response_length)
-        max_model_len = 1024 * (32 + 4)
+        max_model_len = int(config.max_model_len or config.prompt_length + config.response_length)
+        #max_model_len = 1024 * (32 + 4)
 
         if max_num_batched_tokens < max_model_len and self.config.enable_chunked_prefill:
             raise ValueError(
