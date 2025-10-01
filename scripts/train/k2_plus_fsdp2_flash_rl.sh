@@ -30,7 +30,7 @@ export FLASHRL_CONFIG='fp8'
 
 # =================== Cluster Environment ===================
 export ROCR_VISIBLE_DEVICES=None
-export NCCL_TIMEOUT_MS=4800000
+export NCCL_TIMEOUT_SECONDS=4800
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
 NCCL_SOCKET_IFNAME=eth0 \
@@ -241,6 +241,7 @@ calculate_log_probs=True
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
     data.gen_batch_size=${gen_prompt_bsz} \
+    actor_rollout_ref.nccl_timeout=${NCCL_TIMEOUT_SECONDS} \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
