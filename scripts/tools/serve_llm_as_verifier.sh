@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:8
 #SBATCH --time=720:00:00
 #SBATCH --output=slurm/serve_llm_as_verifier_%j.log
-#SBATCH --error=slurm/serve_llm_as_verifier_%j.err
+#SBATCH --error=slurm/serve_llm_as_verifier_%j.log
 
 
 # (1) detect this node’s primary IP

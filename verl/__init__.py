@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# import flash_rl # noqa: F401
+
 import importlib
 import logging
 import os

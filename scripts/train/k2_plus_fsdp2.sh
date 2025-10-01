@@ -14,17 +14,16 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="363334-llama3.1-70b-distill-fsdp-v2-checkpoint_0001500"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-099:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-100:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-065:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v1/bin/
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_MS=4800000
-export TORCH_NCCL_ENABLE_MONITORING=0
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
 NCCL_SOCKET_IFNAME=eth0 \
@@ -43,11 +42,6 @@ SHARP_COLL_ENABLE_SAT=1 \
 SHARP_COLL_LOG_LEVEL=3 \
 SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
 NCCL_COLLNET_ENABLE=1
-
-
-
-NCCL_BLOCKING_WAIT=1 \
-TORCH_NCCL_TRACE_BUFFER_SIZE=1000
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -150,7 +144,7 @@ srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 rm -rf /tmp/ra
 
 # Start Ray head node
 srun --nodes=1 --ntasks=1 -w "$head_node" --export=ALL \
-    env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES TORCH_NCCL_ENABLE_MONITORING=0 \
+    env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES \
     ${CONDA_BIN_PATH}ray start --head --node-ip-address="$head_node_ip" --port=$port \
     --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --include-dashboard=True --block &
 
@@ -161,7 +155,7 @@ for ((i = 1; i < worker_num; i++)); do
     node_i=${nodes[$i]}
     echo "Starting WORKER $i at $node_i"
     srun --nodes=1 --ntasks=1 -w "$node_i" --export=ALL \
-        env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES TORCH_NCCL_ENABLE_MONITORING=0 \
+        env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES \
         ${CONDA_BIN_PATH}ray start --address "$address_head" \
         --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --block &    
 done
@@ -182,7 +176,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 28))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -205,7 +199,7 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 # Training config
 sp_size=16  # Reduced from 32 to reduce memory pressure
 gen_tp=4
-gen_max_num_seqs=512  # Reduced from 1024 to reduce memory pressure
+gen_max_num_seqs=1024  # Reduced from 1024 to reduce memory pressure
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
@@ -265,7 +259,7 @@ offload=True
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
@@ -298,7 +292,7 @@ offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=10 \

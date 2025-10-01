@@ -62,7 +62,6 @@ class Tracking:
 
         if "tracking" in default_backend or "wandb" in default_backend:
             import wandb
-            import weave
 
             settings = None
             if config and config["trainer"].get("wandb_proxy", None):
@@ -334,7 +333,6 @@ class ValidationGenerationsLogger:
 
     def log_generations_to_wandb(self, samples, step):
         import wandb
-        import weave
 
         self._log_generations_to_wandb(samples, step, wandb)
 

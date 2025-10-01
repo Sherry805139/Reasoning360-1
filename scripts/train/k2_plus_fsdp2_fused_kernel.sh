@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gen_bsz_1024_gpu_0.7_k2_plus_fsdp2
+#SBATCH --job-name=fused_kernel_triton_k2_plus_fsdp2
 #SBATCH --nodes=32
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=1
@@ -12,16 +12,20 @@
 #SBATCH --time=720:00:00
 #SBATCH --partition=main
 
+# =================== Conda Environment ===================
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v2/bin/
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="363334-llama3.1-70b-distill-fsdp-v2-checkpoint_0001500"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-100:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-065:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+
+# Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+IDX=0
+TIP_IMP_RATIO_CAP=(1.0 2.0)
+NODE_NAME=(099 267)
+export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-${NODE_NAME[IDX]}:8000"
+echo "STEM_LLM_JUDGE_URL: ${STEM_LLM_JUDGE_URL}"
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v1/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_MS=4800000
 export TORCH_NCCL_ENABLE_MONITORING=0
@@ -43,11 +47,6 @@ SHARP_COLL_ENABLE_SAT=1 \
 SHARP_COLL_LOG_LEVEL=3 \
 SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
 NCCL_COLLNET_ENABLE=1
-
-
-
-NCCL_BLOCKING_WAIT=1 \
-TORCH_NCCL_TRACE_BUFFER_SIZE=1000
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -182,7 +181,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 28))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -203,7 +202,7 @@ top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Training config
-sp_size=16  # Reduced from 32 to reduce memory pressure
+sp_size=8  # Reduced from 32 to reduce memory pressure
 gen_tp=4
 gen_max_num_seqs=512  # Reduced from 1024 to reduce memory pressure
 infer_micro_batch_size=null
@@ -214,6 +213,13 @@ infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # i
 offload=True
 
 # =================== Start RL training ===================
+
+# Flash RL
+# actor_rollout_ref.actor.tis_imp_ratio_cap=1.0
+# actor_rollout_ref.rollout.calculate_log_probs=True
+tip_imp_ratio_cap=-1
+calculate_log_probs=False
+
 "${CONDA_BIN_PATH}python" -m recipe.dapo.main_dapo \
     --config-path=config \
     --config-name="dapo_fsdp_config.yaml" \
@@ -239,6 +245,7 @@ offload=True
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.actor.strategy="fsdp2" \
+    actor_rollout_ref.actor.tis_imp_ratio_cap=${tip_imp_ratio_cap} \
     actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -282,10 +289,13 @@ offload=True
     actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.model.path=$BASE_MODEL \
-    actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.rollout.multi_turn.enable=False \
+    actor_rollout_ref.rollout.calculate_log_probs=${calculate_log_probs} \
     actor_rollout_ref.rollout.mode="sync" \
+    actor_rollout_ref.model.path=$BASE_MODEL \
+    actor_rollout_ref.model.use_fused_kernels=True \
+    actor_rollout_ref.model.fused_kernel_options.impl_backend=triton \
+    actor_rollout_ref.model.use_remove_padding=True \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
@@ -298,7 +308,7 @@ offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=10 \
@@ -306,4 +316,6 @@ offload=True
     trainer.total_epochs=5 \
     trainer.log_val_generations=50 \
     trainer.resume_mode=auto \
-    trainer.max_actor_ckpt_to_keep=1
+    trainer.max_actor_ckpt_to_keep=1 \
+    trainer.rollout_data_dir=rollout_data/train/${WANDB_EXPERIMENT_NAME} \
+    trainer.validation_data_dir=rollout_data/validation/${WANDB_EXPERIMENT_NAME}

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gen_bsz_1024_gpu_0.7_k2_plus_fsdp2
+#SBATCH --job-name=flash_rl_tip_1_bf16_k2_plus_fsdp2
 #SBATCH --nodes=32
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=1
@@ -12,19 +12,25 @@
 #SBATCH --time=720:00:00
 #SBATCH --partition=main
 
+# =================== Conda Environment ===================
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v3/bin/
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="363334-llama3.1-70b-distill-fsdp-v2-checkpoint_0001500"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-100:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-065:8000"
-# export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+
+# Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+IDX=3
+TIP_IMP_RATIO_CAP=(1.0 2.0 3.0 4.0 7.0 8.0 9.0 10.0)
+NODE_NAME=(033 133 134 135 136 139 266 326)
+export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-${NODE_NAME[IDX]}:8000"
+echo "STEM_LLM_JUDGE_URL: ${STEM_LLM_JUDGE_URL}"
+
+export FLASHRL_LOGGING_LEVEL=DEBUG
+export FLASHRL_CONFIG='fp8'
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v1/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_MS=4800000
-export TORCH_NCCL_ENABLE_MONITORING=0
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
 NCCL_SOCKET_IFNAME=eth0 \
@@ -43,11 +49,6 @@ SHARP_COLL_ENABLE_SAT=1 \
 SHARP_COLL_LOG_LEVEL=3 \
 SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
 NCCL_COLLNET_ENABLE=1
-
-
-
-NCCL_BLOCKING_WAIT=1 \
-TORCH_NCCL_TRACE_BUFFER_SIZE=1000
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -131,7 +132,7 @@ test_files="['${math_test_path}','${aime_test_path}','${aime25_test_path2}','${a
 BASE_MODEL=/lustrefs/users/runner/workspace/checkpoints/huggingface/sft/mid4_sft_reasoning_am/checkpoints/checkpoint_0001500
 
 # =================== Logging ===================
-WANDB_PROJECT=DebugReasoning360
+WANDB_PROJECT=FlashRL360
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
@@ -150,7 +151,8 @@ srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 rm -rf /tmp/ra
 
 # Start Ray head node
 srun --nodes=1 --ntasks=1 -w "$head_node" --export=ALL \
-    env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES TORCH_NCCL_ENABLE_MONITORING=0 \
+    env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES \
+    FLASHRL_LOGGING_LEVEL=DEBUG FLASHRL_CONFIG='bf16' \
     ${CONDA_BIN_PATH}ray start --head --node-ip-address="$head_node_ip" --port=$port \
     --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --include-dashboard=True --block &
 
@@ -161,7 +163,8 @@ for ((i = 1; i < worker_num; i++)); do
     node_i=${nodes[$i]}
     echo "Starting WORKER $i at $node_i"
     srun --nodes=1 --ntasks=1 -w "$node_i" --export=ALL \
-        env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES TORCH_NCCL_ENABLE_MONITORING=0 \
+        env -u ROCR_VISIBLE_DEVICES -u HIP_VISIBLE_DEVICES \
+        FLASHRL_LOGGING_LEVEL=DEBUG FLASHRL_CONFIG='bf16' \
         ${CONDA_BIN_PATH}ray start --address "$address_head" \
         --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus 8 --block &    
 done
@@ -182,7 +185,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.2
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 28))
+max_response_length=$((1024 * 32))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -214,6 +217,13 @@ infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 1))  # i
 offload=True
 
 # =================== Start RL training ===================
+
+# Flash RL
+# actor_rollout_ref.actor.tis_imp_ratio_cap=1.0
+# actor_rollout_ref.rollout.calculate_log_probs=True
+tip_imp_ratio_cap=${TIP_IMP_RATIO_CAP[IDX]}
+calculate_log_probs=True
+
 "${CONDA_BIN_PATH}python" -m recipe.dapo.main_dapo \
     --config-path=config \
     --config-name="dapo_fsdp_config.yaml" \
@@ -239,6 +249,7 @@ offload=True
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.actor.strategy="fsdp2" \
+    actor_rollout_ref.actor.tis_imp_ratio_cap=${tip_imp_ratio_cap} \
     actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -282,10 +293,11 @@ offload=True
     actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
+    actor_rollout_ref.rollout.multi_turn.enable=False \
+    actor_rollout_ref.rollout.calculate_log_probs=${calculate_log_probs} \
+    actor_rollout_ref.rollout.mode="sync" \
     actor_rollout_ref.model.path=$BASE_MODEL \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.rollout.multi_turn.enable=False \
-    actor_rollout_ref.rollout.mode="sync" \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
@@ -298,7 +310,7 @@ offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=10 \
