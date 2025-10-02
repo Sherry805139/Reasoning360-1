@@ -142,7 +142,7 @@ def main_task(config):
             "{{ '<|assistant|>\\n' }}"
             "{% endif %}"
             "{% endfor %}"
-        )
+        )    
 
     if config.rollout.temperature == 0.0:
         assert config.data.n_samples == 1, "When temperature=0, n_samples must be 1."
