@@ -15,16 +15,17 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-099:8000"
+export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-135:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-100:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-065:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl/bin/
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v2/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_SECONDS=4800
 export OMPI_MCA_coll_hcoll_enable=0 \
+TORCH_NCCL_ENABLE_MONITORING=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
 NCCL_SOCKET_IFNAME=eth0 \
 UCX_TLS=rc \
@@ -260,7 +261,7 @@ offload=True
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \

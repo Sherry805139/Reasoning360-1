@@ -13,7 +13,7 @@
 #SBATCH --partition=main
 
 # =================== Conda Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v3/bin/
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v2/bin/
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
@@ -33,6 +33,7 @@ export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_SECONDS=4800
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
+TORCH_NCCL_ENABLE_MONITORING=0 \
 NCCL_SOCKET_IFNAME=eth0 \
 UCX_TLS=rc \
 UCX_NET_DEVICES=mlx5_ib0:1 \

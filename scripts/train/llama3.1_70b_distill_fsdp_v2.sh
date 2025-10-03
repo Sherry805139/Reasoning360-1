@@ -21,7 +21,7 @@ export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v1/bin/
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v2/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_SECONDS=4800
 export TORCH_NCCL_ENABLE_MONITORING=0

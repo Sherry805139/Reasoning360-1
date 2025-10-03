@@ -18,11 +18,12 @@ RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from,
 export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-139:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
-export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl/bin/
+export CONDA_BIN_PATH=/lustrefs/users/varad.pimpalkhute/anaconda3/envs/sync-rl-v2/bin/
 export ROCR_VISIBLE_DEVICES=None
 export NCCL_TIMEOUT_MS=4800000
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
+TORCH_NCCL_ENABLE_MONITORING=0 \
 NCCL_SOCKET_IFNAME=eth0 \
 UCX_TLS=rc \
 UCX_NET_DEVICES=mlx5_ib0:1 \
