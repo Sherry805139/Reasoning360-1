@@ -11,7 +11,7 @@
 #SBATCH --exclusive
 #SBATCH --time=24:00:00
 #SBATCH --partition=main
-#SBATCH --array=4  # Adjust this range based on number of temperature values
+#SBATCH --array=0-17%8  # Adjust this range based on number of temperature values
 
 # Define temperature values for the parametric study
 TEMPERATURES=(0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0)
@@ -170,8 +170,9 @@ gpu_ids=0,1,2,3,4,5,6,7
 SHARED_DATA_PATH=/lustrefs/users/zhuojun.cheng/vpim/guru_data
 SHARED_MODEL_PATH=/lustrefs/users/runner/workspace/checkpoints/huggingface/sft
 data_folder=${SHARED_DATA_PATH}/test/offline_leaderboard_release_0603
-save_folder=./evaluation_results/lng131k/am_offline_output_temp_${temp_for_folder}
-model_path=${SHARED_MODEL_PATH}/mid4_sft_reasoning_am_cos_epoch/checkpoints/checkpoint_0002250
+save_folder=./evaluation_results/lng131k/ot_offline_output_temp_${temp_for_folder}
+# model_path=${SHARED_MODEL_PATH}/mid4_sft_reasoning_am_cos_epoch/checkpoints/checkpoint_0002250
+model_path=${SHARED_MODEL_PATH}/mid4_sft_reasoning_ot_cos_epoch/checkpoints/checkpoint_0006300
 # model_path=${SHARED_MODEL_PATH}/mid4_sft_reasoning_am/checkpoints/checkpoint_0001500
 # model_path=${SHARED_MODEL_PATH}/mid4_sft_reasoning_ot/checkpoints/checkpoint_0001500
 
@@ -322,227 +323,227 @@ for leaderboard in "${leaderboard_list[@]}"; do
 done
 
 # =================== Results Aggregation ===================
-echo "Aggregating results for temperature: $temperature"
+# echo "Aggregating results for temperature: $temperature"
 
-# Create results summary directory
-results_summary_dir="./evaluation_results/temperature_study_summary"
-mkdir -p "$results_summary_dir"
+# # Create results summary directory
+# results_summary_dir="./evaluation_results/temperature_study_summary"
+# mkdir -p "$results_summary_dir"
 
-# Create a results file for this temperature
-temp_results_file="${results_summary_dir}/results_temp_${temp_for_folder}.json"
-summary_csv="${results_summary_dir}/temperature_study_summary.csv"
+# # Create a results file for this temperature
+# temp_results_file="${results_summary_dir}/results_temp_${temp_for_folder}.json"
+# summary_csv="${results_summary_dir}/temperature_study_summary.csv"
 
-# Initialize results structure for this temperature
-cat > "$temp_results_file" << EOF
-{
-  "temperature": $temperature,
-  "model_path": "$model_path",
-  "model_name": "$model_name",
-  "job_id": "$SLURM_JOB_ID",
-  "array_task_id": "$SLURM_ARRAY_TASK_ID",
-  "timestamp": "$(date -Iseconds)",
-  "results": {}
-}
-EOF
+# # Initialize results structure for this temperature
+# cat > "$temp_results_file" << EOF
+# {
+#   "temperature": $temperature,
+#   "model_path": "$model_path",
+#   "model_name": "$model_name",
+#   "job_id": "$SLURM_JOB_ID",
+#   "array_task_id": "$SLURM_ARRAY_TASK_ID",
+#   "timestamp": "$(date -Iseconds)",
+#   "results": {}
+# }
+# EOF
 
-# Extract results from each leaderboard's evaluation output
-python3 << 'PYTHON_EOF'
-import json
-import os
-import glob
-import re
-import sys
-from pathlib import Path
+# # Extract results from each leaderboard's evaluation output
+# python3 << 'PYTHON_EOF'
+# import json
+# import os
+# import glob
+# import re
+# import sys
+# from pathlib import Path
 
-# Read the results file we just created
-temp_results_file = os.environ['temp_results_file']
-with open(temp_results_file, 'r') as f:
-    results = json.load(f)
+# # Read the results file we just created
+# temp_results_file = os.environ['temp_results_file']
+# with open(temp_results_file, 'r') as f:
+#     results = json.load(f)
 
-# Look for evaluation results in the save folder
-save_folder = os.environ['save_folder']
-model_name = os.environ['model_name']
-temperature = float(os.environ['temperature'])
+# # Look for evaluation results in the save folder
+# save_folder = os.environ['save_folder']
+# model_name = os.environ['model_name']
+# temperature = float(os.environ['temperature'])
 
-print(f"Looking for results in: {save_folder}/{model_name}")
+# print(f"Looking for results in: {save_folder}/{model_name}")
 
-# Find all result files
-result_files = glob.glob(f"{save_folder}/{model_name}/*_results.json")
-if not result_files:
-    # Try alternative patterns
-    result_files = glob.glob(f"{save_folder}/{model_name}/*.json")
-    result_files = [f for f in result_files if 'results' in f or 'eval' in f]
+# # Find all result files
+# result_files = glob.glob(f"{save_folder}/{model_name}/*_results.json")
+# if not result_files:
+#     # Try alternative patterns
+#     result_files = glob.glob(f"{save_folder}/{model_name}/*.json")
+#     result_files = [f for f in result_files if 'results' in f or 'eval' in f]
 
-print(f"Found {len(result_files)} result files")
+# print(f"Found {len(result_files)} result files")
 
-for result_file in result_files:
-    try:
-        # Extract leaderboard name from filename
-        filename = os.path.basename(result_file)
-        # Try to extract leaderboard name from various filename patterns
-        leaderboard_match = re.search(r'(?:math|codegen|logic|table|simulation|stem|ood)__([^_]+)', filename)
-        if leaderboard_match:
-            leaderboard = leaderboard_match.group(1)
-        else:
-            # Fallback: use filename without extension
-            leaderboard = os.path.splitext(filename)[0]
+# for result_file in result_files:
+#     try:
+#         # Extract leaderboard name from filename
+#         filename = os.path.basename(result_file)
+#         # Try to extract leaderboard name from various filename patterns
+#         leaderboard_match = re.search(r'(?:math|codegen|logic|table|simulation|stem|ood)__([^_]+)', filename)
+#         if leaderboard_match:
+#             leaderboard = leaderboard_match.group(1)
+#         else:
+#             # Fallback: use filename without extension
+#             leaderboard = os.path.splitext(filename)[0]
         
-        print(f"Processing {leaderboard} results from {result_file}")
+#         print(f"Processing {leaderboard} results from {result_file}")
         
-        with open(result_file, 'r') as f:
-            eval_results = json.load(f)
+#         with open(result_file, 'r') as f:
+#             eval_results = json.load(f)
         
-        # Extract key metrics - adapt based on your actual result structure
-        metrics = {}
-        if isinstance(eval_results, dict):
-            # Common metric names to look for
-            metric_keys = ['accuracy', 'score', 'pass_rate', 'success_rate', 'avg_score', 'mean_score']
-            for key in eval_results:
-                if any(metric in key.lower() for metric in metric_keys):
-                    metrics[key] = eval_results[key]
-                elif key in ['total_samples', 'num_correct', 'num_total']:
-                    metrics[key] = eval_results[key]
+#         # Extract key metrics - adapt based on your actual result structure
+#         metrics = {}
+#         if isinstance(eval_results, dict):
+#             # Common metric names to look for
+#             metric_keys = ['accuracy', 'score', 'pass_rate', 'success_rate', 'avg_score', 'mean_score']
+#             for key in eval_results:
+#                 if any(metric in key.lower() for metric in metric_keys):
+#                     metrics[key] = eval_results[key]
+#                 elif key in ['total_samples', 'num_correct', 'num_total']:
+#                     metrics[key] = eval_results[key]
         
-        # If we couldn't find standard metrics, store the whole result
-        if not metrics and eval_results:
-            metrics = eval_results
+#         # If we couldn't find standard metrics, store the whole result
+#         if not metrics and eval_results:
+#             metrics = eval_results
         
-        results['results'][leaderboard] = metrics
+#         results['results'][leaderboard] = metrics
         
-    except Exception as e:
-        print(f"Error processing {result_file}: {e}")
-        results['results'][leaderboard] = {"error": str(e)}
+#     except Exception as e:
+#         print(f"Error processing {result_file}: {e}")
+#         results['results'][leaderboard] = {"error": str(e)}
 
-# Write updated results
-with open(temp_results_file, 'w') as f:
-    json.dump(results, f, indent=2)
+# # Write updated results
+# with open(temp_results_file, 'w') as f:
+#     json.dump(results, f, indent=2)
 
-print(f"Results aggregated for temperature {temperature}")
-PYTHON_EOF
+# print(f"Results aggregated for temperature {temperature}")
+# PYTHON_EOF
 
-# Add this temperature's results to the summary CSV
-python3 << 'PYTHON_EOF'
-import json
-import csv
-import os
-from pathlib import Path
+# # Add this temperature's results to the summary CSV
+# python3 << 'PYTHON_EOF'
+# import json
+# import csv
+# import os
+# from pathlib import Path
 
-temp_results_file = os.environ['temp_results_file']
-summary_csv = os.environ['summary_csv']
+# temp_results_file = os.environ['temp_results_file']
+# summary_csv = os.environ['summary_csv']
 
-# Load this temperature's results
-with open(temp_results_file, 'r') as f:
-    results = json.load(f)
+# # Load this temperature's results
+# with open(temp_results_file, 'r') as f:
+#     results = json.load(f)
 
-temperature = results['temperature']
-timestamp = results['timestamp']
-job_info = f"{results['job_id']}_{results['array_task_id']}"
+# temperature = results['temperature']
+# timestamp = results['timestamp']
+# job_info = f"{results['job_id']}_{results['array_task_id']}"
 
-# Prepare CSV row
-csv_row = {
-    'temperature': temperature,
-    'timestamp': timestamp,
-    'job_info': job_info,
-    'model_name': results['model_name']
-}
+# # Prepare CSV row
+# csv_row = {
+#     'temperature': temperature,
+#     'timestamp': timestamp,
+#     'job_info': job_info,
+#     'model_name': results['model_name']
+# }
 
-# Add metrics for each leaderboard
-for leaderboard, metrics in results['results'].items():
-    if isinstance(metrics, dict) and 'error' not in metrics:
-        for metric_name, metric_value in metrics.items():
-            col_name = f"{leaderboard}_{metric_name}"
-            csv_row[col_name] = metric_value
-    else:
-        csv_row[f"{leaderboard}_status"] = "error" if 'error' in str(metrics) else "completed"
+# # Add metrics for each leaderboard
+# for leaderboard, metrics in results['results'].items():
+#     if isinstance(metrics, dict) and 'error' not in metrics:
+#         for metric_name, metric_value in metrics.items():
+#             col_name = f"{leaderboard}_{metric_name}"
+#             csv_row[col_name] = metric_value
+#     else:
+#         csv_row[f"{leaderboard}_status"] = "error" if 'error' in str(metrics) else "completed"
 
-# Write/append to CSV
-file_exists = os.path.exists(summary_csv)
-with open(summary_csv, 'a' if file_exists else 'w', newline='') as f:
-    if csv_row:  # Only proceed if we have data
-        writer = csv.DictWriter(f, fieldnames=sorted(csv_row.keys()))
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(csv_row)
+# # Write/append to CSV
+# file_exists = os.path.exists(summary_csv)
+# with open(summary_csv, 'a' if file_exists else 'w', newline='') as f:
+#     if csv_row:  # Only proceed if we have data
+#         writer = csv.DictWriter(f, fieldnames=sorted(csv_row.keys()))
+#         if not file_exists:
+#             writer.writeheader()
+#         writer.writerow(csv_row)
 
-print(f"Added temperature {temperature} results to summary CSV")
-PYTHON_EOF
+# print(f"Added temperature {temperature} results to summary CSV")
+# PYTHON_EOF
 
-echo "Results aggregation completed for temperature: $temperature"
-echo "Individual results: $temp_results_file"
-echo "Summary CSV: $summary_csv"
+# echo "Results aggregation completed for temperature: $temperature"
+# echo "Individual results: $temp_results_file"
+# echo "Summary CSV: $summary_csv"
 
-# =================== Final Summary Generation (only for last array task) ===================
-# Create a final comprehensive summary when all jobs are done
-python3 << 'PYTHON_EOF'
-import json
-import os
-import glob
-from pathlib import Path
+# # =================== Final Summary Generation (only for last array task) ===================
+# # Create a final comprehensive summary when all jobs are done
+# python3 << 'PYTHON_EOF'
+# import json
+# import os
+# import glob
+# from pathlib import Path
 
-results_summary_dir = os.environ['results_summary_dir']
-current_temp = float(os.environ['temperature'])
-temperatures = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]  # Match the array
+# results_summary_dir = os.environ['results_summary_dir']
+# current_temp = float(os.environ['temperature'])
+# temperatures = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]  # Match the array
 
-# Check if this is the last temperature (highest value)
-if current_temp == max(temperatures):
-    print("Generating final comprehensive summary...")
+# # Check if this is the last temperature (highest value)
+# if current_temp == max(temperatures):
+#     print("Generating final comprehensive summary...")
     
-    # Collect all individual temperature results
-    all_results = []
-    result_files = glob.glob(f"{results_summary_dir}/results_temp_*.json")
+#     # Collect all individual temperature results
+#     all_results = []
+#     result_files = glob.glob(f"{results_summary_dir}/results_temp_*.json")
     
-    for result_file in result_files:
-        try:
-            with open(result_file, 'r') as f:
-                results = json.load(f)
-            all_results.append(results)
-        except Exception as e:
-            print(f"Error reading {result_file}: {e}")
+#     for result_file in result_files:
+#         try:
+#             with open(result_file, 'r') as f:
+#                 results = json.load(f)
+#             all_results.append(results)
+#         except Exception as e:
+#             print(f"Error reading {result_file}: {e}")
     
-    # Sort by temperature
-    all_results.sort(key=lambda x: x['temperature'])
+#     # Sort by temperature
+#     all_results.sort(key=lambda x: x['temperature'])
     
-    # Create comprehensive summary
-    final_summary = {
-        "study_type": "temperature_parameter_study",
-        "total_temperatures": len(all_results),
-        "temperature_range": [min(r['temperature'] for r in all_results), 
-                            max(r['temperature'] for r in all_results)],
-        "model_info": {
-            "model_path": all_results[0]['model_path'] if all_results else "",
-            "model_name": all_results[0]['model_name'] if all_results else ""
-        },
-        "leaderboards_tested": list(set().union(*[list(r['results'].keys()) for r in all_results])),
-        "results_by_temperature": {str(r['temperature']): r for r in all_results}
-    }
+#     # Create comprehensive summary
+#     final_summary = {
+#         "study_type": "temperature_parameter_study",
+#         "total_temperatures": len(all_results),
+#         "temperature_range": [min(r['temperature'] for r in all_results), 
+#                             max(r['temperature'] for r in all_results)],
+#         "model_info": {
+#             "model_path": all_results[0]['model_path'] if all_results else "",
+#             "model_name": all_results[0]['model_name'] if all_results else ""
+#         },
+#         "leaderboards_tested": list(set().union(*[list(r['results'].keys()) for r in all_results])),
+#         "results_by_temperature": {str(r['temperature']): r for r in all_results}
+#     }
     
-    # Write final summary
-    final_summary_file = f"{results_summary_dir}/final_temperature_study_summary.json"
-    with open(final_summary_file, 'w') as f:
-        json.dump(final_summary, f, indent=2)
+#     # Write final summary
+#     final_summary_file = f"{results_summary_dir}/final_temperature_study_summary.json"
+#     with open(final_summary_file, 'w') as f:
+#         json.dump(final_summary, f, indent=2)
     
-    print(f"Final comprehensive summary written to: {final_summary_file}")
-    print(f"CSV summary available at: {os.environ['summary_csv']}")
+#     print(f"Final comprehensive summary written to: {final_summary_file}")
+#     print(f"CSV summary available at: {os.environ['summary_csv']}")
     
-    # Generate a simple performance comparison
-    comparison_file = f"{results_summary_dir}/temperature_performance_comparison.txt"
-    with open(comparison_file, 'w') as f:
-        f.write("TEMPERATURE PARAMETER STUDY PERFORMANCE COMPARISON\n")
-        f.write("="*60 + "\n\n")
+#     # Generate a simple performance comparison
+#     comparison_file = f"{results_summary_dir}/temperature_performance_comparison.txt"
+#     with open(comparison_file, 'w') as f:
+#         f.write("TEMPERATURE PARAMETER STUDY PERFORMANCE COMPARISON\n")
+#         f.write("="*60 + "\n\n")
         
-        for leaderboard in final_summary['leaderboards_tested']:
-            f.write(f"Leaderboard: {leaderboard}\n")
-            f.write("-" * 30 + "\n")
+#         for leaderboard in final_summary['leaderboards_tested']:
+#             f.write(f"Leaderboard: {leaderboard}\n")
+#             f.write("-" * 30 + "\n")
             
-            for temp_str, temp_data in final_summary['results_by_temperature'].items():
-                if leaderboard in temp_data['results']:
-                    metrics = temp_data['results'][leaderboard]
-                    f.write(f"Temperature {temp_str}: {metrics}\n")
-            f.write("\n")
+#             for temp_str, temp_data in final_summary['results_by_temperature'].items():
+#                 if leaderboard in temp_data['results']:
+#                     metrics = temp_data['results'][leaderboard]
+#                     f.write(f"Temperature {temp_str}: {metrics}\n")
+#             f.write("\n")
     
-    print(f"Performance comparison written to: {comparison_file}")
-    print("Temperature parameter study aggregation complete!")
+#     print(f"Performance comparison written to: {comparison_file}")
+#     print("Temperature parameter study aggregation complete!")
 
-PYTHON_EOF
+# PYTHON_EOF
 
 echo "Parametric study completed for temperature: $temperature"

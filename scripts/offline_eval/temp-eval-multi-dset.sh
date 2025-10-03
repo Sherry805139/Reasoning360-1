@@ -284,9 +284,6 @@ echo "Starting multi-dataset generation at $(date)" | tee -a "$gen_log_file"
         data.prompt_key=prompt \
         model.path=$model_path \
         +model.trust_remote_code=True \
-        +actor_rollout_ref.model.override_config.rope_scaling.type=yarn \
-        +actor_rollout_ref.model.override_config.rope_scaling.factor=4.0 \
-        +actor_rollout_ref.model.override_config.rope_scaling.original_max_position_embeddings=32768 \
         rollout.temperature=$temperature \
         rollout.top_k=-1 \
         rollout.top_p=0.7 \
