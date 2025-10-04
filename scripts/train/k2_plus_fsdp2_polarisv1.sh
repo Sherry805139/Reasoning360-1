@@ -15,7 +15,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-099:8000"
+export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-013:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-135:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-100:8000"
 # export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-065:8000"
@@ -61,9 +61,9 @@ export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=1
 
 # =================== Data Mixture ===================
-SHARED_DATA_PATH=/lustrefs/users/haonan.li/data/k2/
-TRAIN_DATA_DIR=${SHARED_DATA_PATH}train_scored_dedup_am_12k_len_rm_flipscore_score_method_5_2_datamix_6/
-TEST_DATA_DIR=${SHARED_DATA_PATH}test_12k_len/
+SHARED_DATA_PATH=/lustrefs/users/haonan.li/data/k2
+TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train_scored_dedup_am_12k_len_rm_flipscore_score_method_5_2_datamix_6
+TEST_DATA_DIR=${SHARED_DATA_PATH}/test_12k_len
 
 # Math (train)
 math_train_path1=${TRAIN_DATA_DIR}/math__combined_118.2k.part1.parquet
@@ -81,14 +81,14 @@ primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__deduped_primeintellect_9.6k
 taco_train_path=${TRAIN_DATA_DIR}/codegen__deduped_taco_11.1k.parquet
 # Code (test)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500_sampled_200.parquet
+mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
 
 # Logic (train)
 arcagi1_train_path=${TRAIN_DATA_DIR}/logic__arcagi1_297.parquet
 arcagi2_train_path=${TRAIN_DATA_DIR}/logic__arcagi2_653.parquet
 barc_train_path=${TRAIN_DATA_DIR}/logic__barc_3.4k.parquet
-graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_1.4k.parquet
+graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_dataset_1.4k.parquet
 ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_dataset_2.9k.parquet
 zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_dataset_5.0k.parquet
 reasoninggym_train_path=${TRAIN_DATA_DIR}/logic__reasoning_gym_40.6k.parquet
@@ -97,7 +97,7 @@ synlogic_train_path=${TRAIN_DATA_DIR}/logic__synlogic_12.1k.parquet
 zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
 reasoninggym_test_path=${TEST_DATA_DIR}/logic__reasoning_gym_425.parquet
 synlogic_test_path=${TEST_DATA_DIR}/logic__synlogic_217.parquet
-arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_400.parquet
+arcagi1_test_path=${TEST_DATA_DIR}/logic__arcagi1_400.parquet
 # graph_test_path=${TEST_DATA_DIR}/logic__graph_logical_dataset_150_sampled_77.parquet
 # ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150_sampled_100.parquet
 
@@ -120,16 +120,17 @@ nemotron_train_path=${TRAIN_DATA_DIR}/stem__nemotron_13.3k.parquet
 # Stem (test)
 nemotron_test_path=${TEST_DATA_DIR}/stem__nemotron_100.parquet
 gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
-supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
+supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_1k.parquet
 
 # Instruction follow (train)
-if_train_path=${TRAIN_DATA_DIR}/ifbench_train_fixed_scored.parquet
+if_train_path=${TRAIN_DATA_DIR}/ifbench__fixed_85.6k.parquet
 
 if_test_path=${TEST_DATA_DIR}/ood__ifeval_100.parquet
+if_bench_test_path=${TEST_DATA_DIR}/ifbench_800.parquet
 
 
 train_files="['${math_train_path1}','${math_train_path2}','${leetcode_train_path}','${livecodebench_train_path}','${primeintellect_train_path}','${taco_train_path}','${arcagi1_train_path}','${arcagi2_train_path}','${barc_train_path}','${graph_train_path}','${ordering_train_path}','${zebra_train_path}','${reasoninggym_train_path}','${synlogic_train_path}','${codeio_train_path}','${hitab_train_path}','${multihier_train_path}','${webinstruct_train_path}','${nemotron_train_path}','${if_train_path}']"
-test_files="['${math_test_path}','${aime_test_path}','${aime25_test_path2}','${amc_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoninggym_test_path}','${synlogic_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${if_test_path}']"
+test_files="['${math_test_path}','${aime_test_path}','${aime25_test_path2}','${amc_test_path}','${humaneval_test_path}','${mbpp_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoninggym_test_path}','${synlogic_test_path}','${arcagi1_test_path}','${multihier_test_path}','${hitab_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${supergpqa_test_path}','${if_test_path}','${if_bench_test_path}']"
 
 
 # =================== Model ===================
