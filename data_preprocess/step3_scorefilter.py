@@ -118,7 +118,10 @@ def process_folder(source_folder, target_folder, post_process_method, method_nam
     row_counts = []
     
     for filename in sorted(Path(source_folder).glob("*.parquet")):
-        target_file = f"{target_folder}/{filename.name}"
+        # # to process a single file
+        # if filename.name != "ifbench__fixed_85.6k.parquet":
+        #     continue
+        # target_file = f"{target_folder}/{filename.name}"
         
         # Skip if file already exists in target folder
         if os.path.exists(target_file):
