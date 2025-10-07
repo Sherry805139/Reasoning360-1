@@ -1,20 +1,19 @@
 #!/bin/bash
-#SBATCH --job-name=example-multinode-rl-qwen2.5-32b-base-fsdp
-#SBATCH --nodes=8
-#SBATCH --ntasks=8
+#SBATCH --job-name=Qwen2-7B-OC
+#SBATCH --nodes=2
+#SBATCH --ntasks=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:8
-#SBATCH --cpus-per-task=96
-#SBATCH --mem=0
+#SBATCH --cpus-per-task=10
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --error=slurm/%x-%j.err
-#SBATCH --exclusive
-#SBATCH --time=720:00:00
+#SBATCH --account=iq
+#SBATCH --mem=512G
 
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-export STEM_LLM_JUDGE_URL="http://10.24.1.81:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
+export STEM_LLM_JUDGE_URL="<STEM_LLM_JUDGE_URL>"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
 export NCCL_DEBUG=info
@@ -23,8 +22,6 @@ export NCCL_IBEXT_DISABLE=1
 export NCCL_NVLS_ENABLE=1
 export NCCL_IB_HCA=mlx5
 export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
-export CUDA_DEVICE_MAX_CONNECTIONS=1
-export CUDA_LAUNCH_BLOCKING=1
 
 # Get the list of allocated nodes
 nodes=( $(scontrol show hostnames "$SLURM_JOB_NODELIST") )
@@ -43,11 +40,15 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 SHARED_DATA_PATH=./data
-TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train/
-TEST_DATA_DIR=${SHARED_DATA_PATH}/online_eval/
+TRAIN_DATA_DIR=${SHARED_DATA_PATH}/train
+TEST_DATA_DIR=${SHARED_DATA_PATH}/test
+
+# synlogic
+synlogic_train_path=${TRAIN_DATA_DIR}/synlogic_object_counting_train.parquet
+synlogic_test_path=${TEST_DATA_DIR}/synlogic_object_counting_test.parquet
 
 # Math (train)
-math_train_path=${TRAIN_DATA_DIR}/math__combined_5k.parquet
+math_train_path=${TRAIN_DATA_DIR}/math__combined_54.4k.parquet
 # Math (test)
 math_test_path=${TEST_DATA_DIR}/math__math_500.parquet
 aime_test_path=${TEST_DATA_DIR}/math__aime_repeated_8x_240.parquet
@@ -60,7 +61,7 @@ primeintellect_train_path=${TRAIN_DATA_DIR}/codegen__primeintellect_7.5k.parquet
 taco_train_path=${TRAIN_DATA_DIR}/codegen__taco_8.8k.parquet
 # Code (test)
 humaneval_test_path=${TEST_DATA_DIR}/codegen__humaneval_164.parquet
-mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_200.parquet
+mbpp_test_path=${TEST_DATA_DIR}/codegen__mbpp_500.parquet
 livecodebench_test_path=${TEST_DATA_DIR}/codegen__livecodebench_279.parquet
 
 # Logic (train)
@@ -71,35 +72,38 @@ graph_train_path=${TRAIN_DATA_DIR}/logic__graph_logical_1.2k.parquet
 ordering_train_path=${TRAIN_DATA_DIR}/logic__ordering_puzzle_1.9k.parquet
 zebra_train_path=${TRAIN_DATA_DIR}/logic__zebra_puzzle_1.3k.parquet
 # Logic (test)
-ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_100.parquet
-zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_200.parquet
-arcagi_test_path=${TEST_DATA_DIR}/logic__arcagi1_200.parquet
+zebralogic_test_path=${TEST_DATA_DIR}/logic__zebra_puzzle_dataset_300.parquet
+ordering_puzzle_test_path=${TEST_DATA_DIR}/logic__ordering_puzzle_dataset_150.parquet
 
 # Simulation (train)
 codeio_train_path=${TRAIN_DATA_DIR}/simulation__codeio_3.7k.parquet
 # Simulation (test)
-codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_200.parquet
+codeio_test_path=${TEST_DATA_DIR}/simulation__codeio_500.parquet
+arcagi1_test_path=${TEST_DATA_DIR}/simulation__arcagi1_200.parquet
 
 # Table (train)
 hitab_train_path=${TRAIN_DATA_DIR}/table__hitab_4.3k.parquet
 multihier_train_path=${TRAIN_DATA_DIR}/table__multihier_1.5k.parquet
 # Table (test)
-multihier_test_path=${TEST_DATA_DIR}/table__multihier_200.parquet
-hitab_test_path=${TEST_DATA_DIR}/table__hitab_200.parquet
+multihier_test_path=${TEST_DATA_DIR}/table__multihier_300.parquet
+hitab_test_path=${TEST_DATA_DIR}/table__hitab_300.parquet
 
 # Stem (train)
 webinstruct_train_path=${TRAIN_DATA_DIR}/stem__web_3.6k.parquet
 # Stem (test)
+gpqa_diamond_test_path=${TEST_DATA_DIR}/stem__gpqa_diamond_198.parquet
 supergpqa_test_path=${TEST_DATA_DIR}/stem__supergpqa_200.parquet
 
-train_files="['${math_train_path}']"  # Use math as example, add to more tasks as needed
-test_files="['${math_test_path}','${aime_test_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${synlogic_train_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${synlogic_test_path}']"  # Use math as example, add to more tasks as needed
 
 # =================== Model ===================
-BASE_MODEL=Qwen/Qwen2.5-32B
-
+# BASE_MODEL=Qwen/Qwen2.5-32B  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
+# BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+BASE_MODEL=Qwen/Qwen2.5-7B-instruct
+# BASE_MODEL=Qwen/Qwen3-4B-Thinking-2507
 # =================== Logging ===================
-WANDB_PROJECT=Difficulty-Aware-RL
+WANDB_PROJECT=Reasoning360
 WANDB_EXPERIMENT_NAME=${SLURM_JOB_ID}-${SLURM_JOB_NAME}-${BASE_MODEL##*/}
 
 # If RESUME_CKPT_DIR is not empty, resume from the checkpoint
@@ -110,7 +114,7 @@ fi
 
 # =================== Ray start ===================
 # ray stop at all nodes
-srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 ${CONDA_BIN_PATH}ray stop
+srun --nodes=$worker_num --ntasks=$worker_num --ntasks-per-node=1 ray stop
 
 sleep 10
 # Remove existing Ray cluster
@@ -158,20 +162,19 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=128  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
 n_resp_per_prompt=16
-train_prompt_mini_bsz=32  # model grad update batchsize
+train_prompt_mini_bsz=16  # model grad update batchsize
 
 # Algorithm
 temperature=1.0
 top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
-# Training config
-sp_size=1
-gen_tp=2
-gen_max_num_seqs=1024
+# Mathematically equivalent
+sp_size=4
+gen_tp=4
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
@@ -180,9 +183,7 @@ infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # i
 offload=True
 
 # =================== Start RL training ===================
-"${CONDA_BIN_PATH}python" -m recipe.dapo.main_dapo \
-    --config-path=config \
-    --config-name="dapo_fsdp_config.yaml" \
+"${CONDA_BIN_PATH}python" -m verl.recipe.dapo.src.main_dapo \
     algorithm.adv_estimator=${adv_estimator} \
     algorithm.use_kl_in_reward=${use_kl_in_reward} \
     algorithm.kl_ctrl.kl_coef=${kl_coef} \
@@ -233,7 +234,6 @@ offload=True
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.max_num_seqs=${gen_max_num_seqs} \
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
@@ -244,13 +244,13 @@ offload=True
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.rollout.multi_turn.enable=False \
-    actor_rollout_ref.rollout.mode="sync" \
+    +actor_rollout_ref.rollout.multi_turn.enable=False \
+    +actor_rollout_ref.rollout.mode="sync" \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    reward_model.reward_manager=async_multi_process \
+    reward_model.reward_manager=async_dapo \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
     reward_model.overlong_buffer.penalty_factor=${overlong_penalty_factor} \
@@ -259,10 +259,10 @@ offload=True
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
     trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
+    trainer.nnodes="${NNODES}" \
     trainer.nnodes=$worker_num \
-    trainer.save_freq=10 \
-    trainer.test_freq=10 \
+    trainer.save_freq=5 \
+    trainer.test_freq=5 \
     trainer.total_epochs=5 \
-    trainer.log_val_generations=50 \
-    trainer.resume_mode=auto \
-    trainer.max_actor_ckpt_to_keep=2
+    +trainer.val_generations_to_log_to_wandb=30 \
+    trainer.resume_mode=auto
