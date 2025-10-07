@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=fused_kernel_triton_k2_plus_fsdp2
+#SBATCH --job-name=liger_kernel_k2_plus_fsdp2
 #SBATCH --nodes=32
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=1
@@ -21,13 +21,13 @@ RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from,
 # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 IDX=0
 TIP_IMP_RATIO_CAP=(1.0 2.0)
-NODE_NAME=(099 267)
+NODE_NAME=(267 099)
 export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-${NODE_NAME[IDX]}:8000"
 echo "STEM_LLM_JUDGE_URL: ${STEM_LLM_JUDGE_URL}"
 
 # =================== Cluster Environment ===================
 export ROCR_VISIBLE_DEVICES=None
-export NCCL_TIMEOUT_SECONDS=4800
+export NCCL_TIMEOUT_SECONDS=6000
 export TORCH_NCCL_ENABLE_MONITORING=0
 export OMPI_MCA_coll_hcoll_enable=0 \
 CUDA_DEVICE_ORDER=PCI_BUS_ID \
@@ -204,7 +204,7 @@ top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 # Training config
 sp_size=8  # Reduced from 32 to reduce memory pressure
 gen_tp=4
-gen_max_num_seqs=512  # Reduced from 1024 to reduce memory pressure
+gen_max_num_seqs=1024  # Reduced from 1024 to reduce memory pressure
 infer_micro_batch_size=null
 train_micro_batch_size=null
 use_dynamic_bsz=True
@@ -294,8 +294,7 @@ calculate_log_probs=False
     actor_rollout_ref.rollout.calculate_log_probs=${calculate_log_probs} \
     actor_rollout_ref.rollout.mode="sync" \
     actor_rollout_ref.model.path=$BASE_MODEL \
-    actor_rollout_ref.model.use_fused_kernels=True \
-    actor_rollout_ref.model.fused_kernel_options.impl_backend=triton \
+    actor_rollout_ref.model.use_liger=True \
     actor_rollout_ref.model.use_remove_padding=True \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
