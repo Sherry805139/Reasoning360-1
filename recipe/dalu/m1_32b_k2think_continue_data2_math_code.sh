@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=rl-70b-data_5_1_mix6
+#SBATCH --job-name=rl-32b-k2think-continue-data5_2
 #SBATCH --nodes=32
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=1
@@ -13,7 +13,8 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+RESUME_CKPT_DIR_NAME="/lustrefs/users/haonan.li/Reasoning360/checkpoints/DALU/363947-rl-32b-k2think-continue-data5_2-K2-Think"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+WANDB_ID="lyl3mkni"
 export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-320:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -60,7 +61,7 @@ export VLLM_USE_V1=0
 
 # =================== Data Mixture ===================
 #TRAIN_DATA_DIR=/mnt/sharefs/users/zhuojun.cheng/guru_data/train/postprocessed_dedup_am
-TRAIN_DATA_DIR=/lustrefs/users/haonan.li/data/k2/train_scored_dedup_am_12k_len_rm_flipscore_score_method_5_1_datamix_6
+TRAIN_DATA_DIR=/lustrefs/users/haonan.li/data/k2/train_scored_dedup_am_12k_len_rm_flipscore_score_method_5_2_datamix_6
 TEST_DATA_DIR=/lustrefs/users/haonan.li/data/k2/test_12k_len
 # Math (train)
 math_train1_path=${TRAIN_DATA_DIR}/math__combined_118.2k.part1.parquet
@@ -135,13 +136,13 @@ livebench_data_analysis_test_path=${TEST_DATA_DIR}/ood__livebench_data_analysis_
 livebench_language_test_path=${TEST_DATA_DIR}/ood__livebench_language_140.parquet
 livebench_reasoning_test_path=${TEST_DATA_DIR}/ood__livebench_reasoning_150.parquet
 
-train_files="['${math_train1_path}', '${math_train2_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${ordering_train_path}', '${zebra_train_path}', '${reasoning_gym_train_path}', '${synlogic_train_path}', '${codeio_train_path}', '${hitab_train_path}', '${multihier_train_path}', '${webinstruct_train_path}', '${nemotron_train_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train1_path}', '${math_train2_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${zebra_train_path}', '${reasoning_gym_train_path}', '${codeio_train_path}']"  # Use math as example, add to more tasks as needed
 # test_files="['${math_train1_path}']"
-test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${math_test_path}', '${humaneval_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${synlogic_test_path}','${multihier_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${math_test_path}', '${humaneval_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${gpqa_diamond_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
 # test_files="['${supergpqa_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
 
 # =================== Model ===================
-BASE_MODEL=/lustrefs/users/runner/workspace/checkpoints/huggingface/sft/mid2_sft/checkpoints/checkpoint_0001500
+BASE_MODEL=LLM360/K2-Think
 CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/Reasoning360/bin/
 
 # =================== Logging ===================
@@ -200,7 +201,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 28))
+max_response_length=$((1024 * 48))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -314,12 +315,13 @@ offload=True
     trainer.nnodes=$worker_num \
     trainer.save_freq=10 \
     trainer.test_freq=10 \
-    trainer.total_epochs=5 \
+    trainer.total_epochs=10 \
     trainer.log_val_generations=1 \
     trainer.resume_mode=auto \
+    +trainer.run_id=${WANDB_ID} \
     trainer.max_actor_ckpt_to_keep=2 \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.enable_budget=True \
     +data.dynamic_filtering=True \
-    +data.pass_rate_upper_bound=1 \
+    +data.pass_rate_upper_bound=0.9 \
     +data.initial_pass_rate_column=deepseek_r1_0528_pass_rate

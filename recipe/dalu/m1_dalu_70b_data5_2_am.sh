@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=rl-32b-k2think-continue-data5_2
-#SBATCH --nodes=32
-#SBATCH --ntasks=32
+#SBATCH --job-name=rl-70b-am-data_5_2_mix6
+#SBATCH --nodes=16
+#SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=96
 #SBATCH --gres=gpu:8
@@ -14,6 +14,7 @@
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
+WANDB_RUN_ID=""
 export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-320:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -135,13 +136,13 @@ livebench_data_analysis_test_path=${TEST_DATA_DIR}/ood__livebench_data_analysis_
 livebench_language_test_path=${TEST_DATA_DIR}/ood__livebench_language_140.parquet
 livebench_reasoning_test_path=${TEST_DATA_DIR}/ood__livebench_reasoning_150.parquet
 
-train_files="['${math_train1_path}', '${math_train2_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${zebra_train_path}', '${reasoning_gym_train_path}', '${codeio_train_path}']"  # Use math as example, add to more tasks as needed
+train_files="['${math_train1_path}', '${math_train2_path}', '${leetcode_train_path}', '${livecodebench_train_path}', '${primeintellect_train_path}', '${taco_train_path}', '${arcagi1_train_path}', '${arcagi2_train_path}', '${barc_train_path}', '${graph_train_path}', '${ordering_train_path}', '${zebra_train_path}', '${reasoning_gym_train_path}', '${hitab_train_path}', '${multihier_train_path}', '${webinstruct_train_path}', '${nemotron_train_path}', '${ifbench_train_path}']"  # Use math as example, add to more tasks as needed
 # test_files="['${math_train1_path}']"
-test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${math_test_path}', '${humaneval_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${gpqa_diamond_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
+test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${math_test_path}', '${humaneval_test_path}','${livecodebench_test_path}','${zebralogic_test_path}','${reasoning_gym_test_path}','${multihier_test_path}','${nemotron_test_path}','${gpqa_diamond_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
 # test_files="['${supergpqa_test_path}','${ifeval_test_path}']"  # Use math as example, add to more tasks as needed
 
 # =================== Model ===================
-BASE_MODEL=LLM360/K2-Think
+BASE_MODEL=/lustrefs/users/runner/workspace/checkpoints/huggingface/sft/mid4_sft_reasoning_am_cos_epoch/checkpoints/checkpoint_0002250
 CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/Reasoning360/bin/
 
 # =================== Logging ===================
@@ -200,7 +201,7 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 4))
-max_response_length=$((1024 * 60))
+max_response_length=$((1024 * 28))
 enable_overlong_buffer=False
 overlong_buffer_len=$((1024 * 4))
 overlong_penalty_factor=1.0
@@ -309,14 +310,15 @@ offload=True
     trainer.logger=['console','wandb'] \
     trainer.project_name=${WANDB_PROJECT} \
     trainer.experiment_name=${WANDB_EXPERIMENT_NAME} \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$worker_num \
     trainer.save_freq=10 \
     trainer.test_freq=10 \
-    trainer.total_epochs=10 \
+    trainer.total_epochs=5 \
     trainer.log_val_generations=1 \
     trainer.resume_mode=auto \
+    +trainer.run_id=${WANDB_RUN_ID} \
     trainer.max_actor_ckpt_to_keep=2 \
     trainer.default_local_dir="${DEFAULT_LOCAL_DIR}" \
     +trainer.enable_budget=True \
