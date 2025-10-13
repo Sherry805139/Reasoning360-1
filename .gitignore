@@ -1,10 +1,8 @@
 
 **/*.pt
-**/checkpoints
 **/wget-log
 **/_build/
 **/*.ckpt
-**/outputs
 **/*.tar.gz
 **/playground
 **/wandb
@@ -129,6 +127,10 @@ outputs
 # Ignore all files in root directory, but keep directories
 /*
 !/*/
+
+/rollout_data/
+/checkpoints/
+/outputs/
 
 # But keep these important files/directories
 !/README*
