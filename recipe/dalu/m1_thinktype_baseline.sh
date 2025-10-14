@@ -19,27 +19,28 @@ export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-320:8000"  # Fill i
 
 # =================== Cluster Environment ===================
 # force IB and pick the rails explicitly
+export ROCR_VISIBLE_DEVICES=None
+export NCCL_TIMEOUT_MS=4800000
 export OMPI_MCA_coll_hcoll_enable=0 \
-    CUDA_DEVICE_ORDER=PCI_BUS_ID \
-    NCCL_SOCKET_IFNAME=eth0 \
-    UCX_TLS=rc \
-    UCX_NET_DEVICES=mlx5_ib0:1 \
-    NCCL_DEBUG=WARN \
-    NCCL_TOPO_FILE=/opt/microsoft/ndv5-topo.xml \
-    NCCL_IB_PCI_RELAXED_ORDERING=1 \
-    NCCL_IB_QPS_PER_CONNECTION=4 \
-    NCCL_IGNORE_CPU_AFFINITY=1 \
-    NCCL_P2P_NET_CHUNKSIZE=$((512 * 1024)) \
-    NCCL_PXN_DISABLE=1 \
-    NCCL_MIN_NCHANNELS=32 \
-    SHARP_SMX_UCX_INTERFACE=mlx5_ib0:1 \
-    SHARP_COLL_ENABLE_SAT=1 \
-    SHARP_COLL_LOG_LEVEL=3 \
-    SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
-    NCCL_COLLNET_ENABLE=1 \
-    NCCL_TIMEOUT=7200 \
-    NCCL_BLOCKING_WAIT=1 \
-    TORCH_NCCL_TRACE_BUFFER_SIZE=1000 
+CUDA_DEVICE_ORDER=PCI_BUS_ID \
+TORCH_NCCL_ENABLE_MONITORING=0 \
+NCCL_SOCKET_IFNAME=eth0 \
+UCX_TLS=rc \
+UCX_NET_DEVICES=mlx5_ib0:1 \
+NCCL_DEBUG=WARN \
+NCCL_TOPO_FILE=/opt/microsoft/ndv5-topo.xml \
+NCCL_IB_PCI_RELAXED_ORDERING=1 \
+NCCL_IB_QPS_PER_CONNECTION=4 \
+NCCL_IGNORE_CPU_AFFINITY=1 \
+NCCL_P2P_NET_CHUNKSIZE=$((512 * 1024)) \
+NCCL_PXN_DISABLE=1 \
+NCCL_MIN_NCHANNELS=32 \
+SHARP_SMX_UCX_INTERFACE=mlx5_ib0:1 \
+SHARP_COLL_ENABLE_SAT=1 \
+SHARP_COLL_LOG_LEVEL=3 \
+SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1 \
+NCCL_COLLNET_ENABLE=1 \
+NCCL_TIMEOUT=7200
 
 
 export TRITON_HOME=/tmp/triton_cache
@@ -143,7 +144,7 @@ test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${
 
 # =================== Model ===================
 BASE_MODEL=MBZUAI-IFM/TP-base-7B
-CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/verl-0.5/bin/
 
 # =================== Logging ===================
 WANDB_PROJECT=ThinkType
@@ -211,9 +212,9 @@ loss_agg_mode="token-mean"
 enable_filter_groups=False
 filter_groups_metric=acc
 max_num_gen_batches=10
-train_prompt_bsz=512  # on-policy model update batchsize: train_prompt_bsz * rollout.n
+train_prompt_bsz=256  # on-policy model update batchsize: train_prompt_bsz * rollout.n
 gen_prompt_bsz=$((train_prompt_bsz * 1))
-n_resp_per_prompt=16
+n_resp_per_prompt=8
 train_prompt_mini_bsz=32  # model grad update batchsize
 
 # Algorithm
@@ -222,7 +223,7 @@ top_p=1.0
 top_k=-1 # 0 for HF rollout, -1 for vLLM rollout
 
 # Training config
-sp_size=2
+sp_size=1
 gen_tp=4
 gen_max_num_seqs=1024
 infer_micro_batch_size=null
@@ -257,7 +258,7 @@ offload=True
     actor_rollout_ref.actor.clip_ratio_c=10.0 \
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
-    actor_rollout_ref.actor.strategy="fsdp" \
+    actor_rollout_ref.actor.strategy="fsdp2" \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -272,21 +273,28 @@ offload=True
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
+    actor_rollout_ref.actor.fsdp_config.forward_prefetch=True \
+    actor_rollout_ref.actor.entropy_checkpointing=True \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
     actor_rollout_ref.ref.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
+    actor_rollout_ref.ref.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.nccl_timeout=${NCCL_TIMEOUT} \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=${infer_ppo_max_token_len} \
     actor_rollout_ref.rollout.max_num_seqs=${gen_max_num_seqs} \
+    actor_rollout_ref.rollout.disable_log_stats=False \
+    actor_rollout_ref.rollout.enforce_eager=False \
+    actor_rollout_ref.rollout.enable_prefix_caching=True \
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
@@ -303,6 +311,7 @@ offload=True
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.enable_activation_offload=True \
     reward_model.reward_manager=async_multi_process \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \

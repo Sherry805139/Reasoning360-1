@@ -142,7 +142,7 @@ test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${
 
 # =================== Model ===================
 BASE_MODEL=LLM360/K2-Think
-CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/verl-0.5/bin/
 
 # =================== Logging ===================
 WANDB_PROJECT=DALU
@@ -276,6 +276,7 @@ offload=True
     actor_rollout_ref.ref.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
+    actor_rollout_ref.ref.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
@@ -286,6 +287,9 @@ offload=True
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=${infer_ppo_max_token_len} \
     actor_rollout_ref.rollout.max_num_seqs=${gen_max_num_seqs} \
+    actor_rollout_ref.rollout.disable_log_stats=False \
+    actor_rollout_ref.rollout.enforce_eager=False \
+    actor_rollout_ref.rollout.enable_prefix_caching=True \
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
@@ -302,6 +306,7 @@ offload=True
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.enable_activation_offload=True \
     reward_model.reward_manager=async_multi_process \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \

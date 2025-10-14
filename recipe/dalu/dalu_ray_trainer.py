@@ -23,7 +23,7 @@ from copy import deepcopy
 from pprint import pprint
 
 import numpy as np
-import pandas as pd  
+import pandas as pd
 import torch
 from tqdm import tqdm
 
@@ -43,6 +43,7 @@ from verl.trainer.ppo.ray_trainer import (
     compute_response_mask,
 )
 from verl.utils.profiler import marked_timer
+from verl.utils.rollout_skip import RolloutSkip
 
 
 class RayDALUTrainer(RayPPOTrainer):
@@ -64,46 +65,46 @@ class RayDALUTrainer(RayPPOTrainer):
         from verl.trainer.main_ppo import create_rl_sampler
         from verl.utils.dataset.rl_dataset import collate_fn
         from torchdata.stateful_dataloader import StatefulDataLoader
-        
+
         # Initialize columns for the first epoch
         max_easy_ratio = self.config.data.get("max_easy_ratio", 0.1)
         max_hard_ratio = self.config.data.get("max_hard_ratio", 0.2)
-        if epoch_idx == 0: 
+        if epoch_idx == 0:
             # Get the initial pass rate column name from config, with default fallback
             initial_pass_rate_column = self.config.data.get("initial_pass_rate_column", "qwen3_30b_pass_rate")
             self.train_dataset.dataframe["prev_pass_rate"] = self.train_dataset.dataframe[initial_pass_rate_column]
             # use half of the max response length as the average length for the first epoch
-            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4 
+            self.train_dataset.dataframe["prev_passed_avg_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4
             self.train_dataset.dataframe["prev_passed_max_length"] = self.config.data.get("max_response_length", 1024*28) * 3 / 4
             self.train_dataset.dataframe["prev_passed_80th_length"] = self.config.data.get("max_response_length", 1024*28)
             self.train_dataset.dataframe["prev_passed_50th_length"] = self.config.data.get("max_response_length", 1024*28)
-        
+
         def _assign_length_budget(row, pass_rate_upper_bound, max_response_length):
             prompt_pass_rate = row['prev_pass_rate']
             passed_prompt_avg_length = row['prev_passed_avg_length']
             passed_prompt_max_length = row['prev_passed_max_length']
-            
+
             # Get configurable multipliers with default values
             perfect_pass_rate_multiplier = self.config.data.get("perfect_pass_rate_multiplier", 1.0)
             high_pass_rate_multiplier = self.config.data.get("high_pass_rate_multiplier", 0.8)
-            
+
             if prompt_pass_rate == 1.0:
                 new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
             elif prompt_pass_rate > pass_rate_upper_bound:
                 new_length_budget = max(high_pass_rate_multiplier * passed_prompt_max_length, passed_prompt_avg_length)
             else:
                 new_length_budget = passed_prompt_max_length + (max_response_length - passed_prompt_max_length) * (1 - prompt_pass_rate)
-            
+
             new_length_budget = max(new_length_budget, 4000)  # Set minimum to 2000
             new_length_budget = min(new_length_budget, max_response_length)  # Cap at max response length
-            
+
             # print(f"new_length_budget: {new_length_budget}")
             # print(f"max_response_length: {max_response_length}")
             # print(f"passed_prompt_max_length: {passed_prompt_max_length}")
             # print(f"passed_prompt_avg_length: {passed_prompt_avg_length}")
             # print(f"prompt_pass_rate: {prompt_pass_rate}")
             # print(f"pass_rate_upper_bound: {pass_rate_upper_bound}")
-            
+
             return int(new_length_budget)
 
         if enable_budget:
@@ -123,16 +124,16 @@ class RayDALUTrainer(RayPPOTrainer):
             perfect_mask = original_df["prev_pass_rate"] == 1.0
             failed_mask = original_df["prev_pass_rate"] == 0.0
             medium_mask = (original_df["prev_pass_rate"] > 0.0) & (original_df["prev_pass_rate"] < 1.0)
-            
+
             # Get indices for each category
             medium_indices = original_df[medium_mask].index.tolist()
             perfect_indices = original_df[perfect_mask].index.tolist()
             failed_indices = original_df[failed_mask].index.tolist()
-            
+
             # Keep all medium difficulty data
             kept_indices = set(medium_indices)
             n_medium = len(medium_indices)
-            
+
             # Limit perfect examples to 1/10 of medium examples
             self.n_drop_easy = 0
             if perfect_indices:
@@ -142,7 +143,7 @@ class RayDALUTrainer(RayPPOTrainer):
                     kept_perfect = np.random.choice(perfect_indices, size=n_keep_perfect, replace=False)
                     kept_indices.update(kept_perfect)
                 self.n_drop_easy = len(perfect_indices) - n_keep_perfect
-            
+
             # Limit failed examples to 1/5 of medium examples
             self.n_drop_hard = 0
             if failed_indices:
@@ -152,35 +153,35 @@ class RayDALUTrainer(RayPPOTrainer):
                     kept_failed = np.random.choice(failed_indices, size=n_keep_failed, replace=False)
                     kept_indices.update(kept_failed)
                 self.n_drop_hard = len(failed_indices) - n_keep_failed
-            
-            filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True) 
+
+            filtered_df = original_df.loc[list(kept_indices)].reset_index(drop=True)
             # Log filtering statistics
             n_perfect_kept = len(set(perfect_indices) & kept_indices)
             n_failed_kept = len(set(failed_indices) & kept_indices)
             n_medium_kept = len(set(medium_indices) & kept_indices)
-            
+
             print(f"Dataset filtering statistics for epoch {epoch_idx}:")
             print(f"Original dataset size: {len(original_df)}")
             print(f"  - Perfect examples (pass_rate=1.0): {len(perfect_indices)} -> {n_perfect_kept} kept ({n_perfect_kept/max(1,len(perfect_indices))*100:.1f}%)")
-            print(f"  - Failed examples (pass_rate=0.0): {len(failed_indices)} -> {n_failed_kept} kept ({n_failed_kept/max(1,len(failed_indices))*100:.1f}%)")  
+            print(f"  - Failed examples (pass_rate=0.0): {len(failed_indices)} -> {n_failed_kept} kept ({n_failed_kept/max(1,len(failed_indices))*100:.1f}%)")
             print(f"  - Medium examples (0<pass_rate<1): {len(medium_indices)} -> {n_medium_kept} kept ({n_medium_kept/max(1,len(medium_indices))*100:.1f}%)")
             print(f"Filtered dataset size: {len(filtered_df)}")
             print(f"Total discarded data points: {len(original_df) - len(filtered_df)}")
             print(f"Total percentage discarded: {100 * (len(original_df) - len(filtered_df)) / len(original_df):.2f}%")
         else:
             filtered_df = self.train_dataset.dataframe.copy()
-        
+
         # Shuffle the dataset before sorting to randomize order of samples with same pass_rate
         # This ensures better diversity in training batches
         filtered_df = filtered_df.sample(frac=1.0, random_state=42 + epoch_idx).reset_index(drop=True)
-                
+
         # Sort by per_prompt_length_budget for more efficient rollout batching
         filtered_df = filtered_df.sort_values(by="per_prompt_length_budget", ascending=True).reset_index(drop=True)
-        
+
         # Create filtered dataset copy
         train_dataset_copy = deepcopy(self.train_dataset)
         train_dataset_copy.dataframe = filtered_df
-        
+
         # Create dataloader
         self.train_dataloader = StatefulDataLoader(
             dataset=train_dataset_copy,
@@ -190,7 +191,7 @@ class RayDALUTrainer(RayPPOTrainer):
             collate_fn=collate_fn,
             sampler=SequentialSampler(data_source=filtered_df),
         )
-        
+
         print(f"Size of train dataloader: {len(self.train_dataloader)}, Size of val dataloader: {len(self.val_dataloader)}")
         assert len(self.train_dataloader) >= 1, "Train dataloader is empty!"
         assert len(self.val_dataloader) >= 1, "Validation dataloader is empty!"
@@ -217,6 +218,7 @@ class RayDALUTrainer(RayPPOTrainer):
         )
 
         self.global_steps = 0
+        self.gen_steps = 0
 
         # load checkpoint before doing anything
         self._load_checkpoint()
@@ -231,12 +233,25 @@ class RayDALUTrainer(RayPPOTrainer):
             if self.config.trainer.get("val_only", False):
                 return
 
+        if self.config.actor_rollout_ref.rollout.get("skip_rollout", False):
+            rollout_skip = RolloutSkip(self.config, self.actor_rollout_wg)
+            rollout_skip.wrap_generate_sequences()
+
         # add tqdm
         progress_bar = tqdm(total=self.total_training_steps, initial=self.global_steps, desc="Training Progress")
 
         # we start from step 1
         self.global_steps += 1
+        self.gen_steps += 1
         last_val_metrics = None
+
+        prev_step_profile = False
+        curr_step_profile = (
+            self.global_steps in self.config.global_profiler.steps
+            if self.config.global_profiler.steps is not None
+            else False
+        )
+        next_step_profile = False
 
         timing_raw = defaultdict(float)
         batch = None
@@ -251,26 +266,18 @@ class RayDALUTrainer(RayPPOTrainer):
             # create create the default_local_dir if not exists
             if not os.path.exists(self.config.trainer.default_local_dir):
                 os.makedirs(self.config.trainer.default_local_dir)
-            train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir, 
+            train_dataset.dataframe.to_csv(os.path.join(self.config.trainer.default_local_dir,
                 f"train_dataset_epoch_{epoch}.csv"), index=False)
 
             for batch_dict in self.train_dataloader:
                 metrics = {}
 
-                do_profile = (
-                    self.global_steps in self.config.trainer.profile_steps
-                    if self.config.trainer.profile_steps is not None
-                    else False
-                )
                 with marked_timer("start_profile", timing_raw):
-                    if do_profile:
-                        self.actor_rollout_wg.start_profile(role="e2e", profile_step=self.global_steps)
-                        if self.use_reference_policy:
-                            self.ref_policy_wg.start_profile()
-                        if self.use_critic:
-                            self.critic_wg.start_profile()
-                        if self.use_rm:
-                            self.rm_wg.start_profile()
+                    self._start_profiling(
+                        not prev_step_profile and curr_step_profile
+                        if self.config.global_profiler.profile_continuous_steps
+                        else curr_step_profile
+                    )
 
                 new_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 num_gen_batches += 1
@@ -317,7 +324,7 @@ class RayDALUTrainer(RayPPOTrainer):
                     )
                     # repeat to align with repeated responses in rollout
                     new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                    
+
                     # Remove per_prompt_length_budget from gen_batch_output if it exists to prevent union conflict
                     if "per_prompt_length_budget" in gen_batch_output.non_tensor_batch:
                         gen_batch_output.non_tensor_batch.pop("per_prompt_length_budget")
@@ -411,6 +418,8 @@ class RayDALUTrainer(RayPPOTrainer):
                             if max_num_gen_batches <= 0 or num_gen_batches < max_num_gen_batches:
                                 print(f"{num_gen_batches=}. Keep generating...")
                                 progress_bar.update(1)
+                                self.gen_steps += 1
+                                is_last_step = self.global_steps >= self.total_training_steps
                                 continue
                             else:
                                 raise ValueError(
@@ -474,7 +483,7 @@ class RayDALUTrainer(RayPPOTrainer):
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                         )
                     with marked_timer("pass_rate_append", timing_raw, "orange"):
-                        # compute the pass rate for the batch 
+                        # compute the pass rate for the batch
                         temp_df = pd.DataFrame({
                             "prompt_id": batch.non_tensor_batch["prompt_id"],
                             "prev_pass_rate": batch.non_tensor_batch["score"]
@@ -487,13 +496,13 @@ class RayDALUTrainer(RayPPOTrainer):
                         response_mask = batch.batch["attention_mask"][:, -response_length:]
                         response_lengths = response_mask.sum(dim=-1).float().cpu().numpy()  # actual lengths per response
                         scores = batch.non_tensor_batch["score"]
-                        
+
                         # Filter for successful rollouts only (score == 1)
                         successful_mask = scores == 1
                         if np.any(successful_mask):
                             successful_prompt_ids = batch.non_tensor_batch["prompt_id"][successful_mask]
                             successful_response_lengths = response_lengths[successful_mask]
-                            
+
                             temp_length_df = pd.DataFrame({
                                 "prompt_id": successful_prompt_ids,
                                 "response_length": successful_response_lengths
@@ -506,14 +515,14 @@ class RayDALUTrainer(RayPPOTrainer):
                             quantile_8_length_df.rename(columns={"response_length": "prev_passed_80th_length"}, inplace=True)
                             quantile_5_length_df = temp_length_df.groupby("prompt_id", as_index=False)["response_length"].quantile(0.5).set_index('prompt_id')[['response_length']]
                             quantile_5_length_df.rename(columns={'response_length': "prev_passed_50th_length"}, inplace=True)
-                            
+
                             # Update the dataframe with both pass rates and average lengths
                             self.train_dataset.dataframe = self.train_dataset.dataframe.set_index('prompt_id')
                             avg_length_df = avg_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             max_length_df = max_length_df.astype(self.train_dataset.dataframe['prev_passed_max_length'].dtypes)
                             quantile_8_length_df = quantile_8_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
                             quantile_5_length_df = quantile_5_length_df.astype(self.train_dataset.dataframe['prev_passed_avg_length'].dtypes)
-                            
+
                             self.train_dataset.dataframe.update(pass_rate_df)
                             self.train_dataset.dataframe.update(avg_length_df)
                             self.train_dataset.dataframe.update(max_length_df)
@@ -545,33 +554,64 @@ class RayDALUTrainer(RayPPOTrainer):
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
 
-                    # validate
-                    if (
-                        self.val_reward_fn is not None
-                        and self.config.trainer.test_freq > 0
-                        and (is_last_step or self.global_steps % self.config.trainer.test_freq == 0)
-                    ):
-                        with marked_timer("testing", timing_raw, "green"):
-                            val_metrics: dict = self._validate()
-                            if is_last_step:
-                                last_val_metrics = val_metrics
-                        metrics.update(val_metrics)
+                    # Log rollout generations if enabled
+                    rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
+                    if rollout_data_dir:
+                        with marked_timer("dump_rollout_generations", timing_raw, color="green"):
+                            inputs = self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
+                            outputs = self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
+                            scores = batch.batch["token_level_scores"].sum(-1).cpu().tolist()
+                            sample_gts = [
+                                item.non_tensor_batch.get("reward_model", {}).get("ground_truth", None)
+                                for item in batch
+                            ]
 
-                    if self.config.trainer.save_freq > 0 and (
-                        is_last_step or self.global_steps % self.config.trainer.save_freq == 0
-                    ):
-                        with marked_timer("save_checkpoint", timing_raw, "green"):
-                            self._save_checkpoint()
+                            if "request_id" in batch.non_tensor_batch:
+                                reward_extra_infos_dict.setdefault(
+                                    "request_id",
+                                    batch.non_tensor_batch["request_id"].tolist(),
+                                )
+
+                            self._dump_generations(
+                                inputs=inputs,
+                                outputs=outputs,
+                                gts=sample_gts,
+                                scores=scores,
+                                reward_extra_infos_dict=reward_extra_infos_dict,
+                                dump_path=rollout_data_dir,
+                            )
+
+                # validate
+                if (
+                    self.val_reward_fn is not None
+                    and self.config.trainer.test_freq > 0
+                    and (is_last_step or self.global_steps % self.config.trainer.test_freq == 0)
+                ):
+                    with marked_timer("testing", timing_raw, "green"):
+                        val_metrics: dict = self._validate()
+                        if is_last_step:
+                            last_val_metrics = val_metrics
+                    metrics.update(val_metrics)
+
+                if self.config.trainer.save_freq > 0 and (
+                    is_last_step or self.global_steps % self.config.trainer.save_freq == 0
+                ):
+                    with marked_timer("save_checkpoint", timing_raw, "green"):
+                        self._save_checkpoint()
 
                 with marked_timer("stop_profile", timing_raw):
-                    if do_profile:
-                        self.actor_rollout_wg.stop_profile()
-                        if self.use_reference_policy:
-                            self.ref_policy_wg.stop_profile()
-                        if self.use_critic:
-                            self.critic_wg.stop_profile()
-                        if self.use_rm:
-                            self.rm_wg.stop_profile()
+                    next_step_profile = (
+                        self.global_steps + 1 in self.config.global_profiler.steps
+                        if self.config.global_profiler.steps is not None
+                        else False
+                    )
+                    self._stop_profiling(
+                        curr_step_profile and not next_step_profile
+                        if self.config.global_profiler.profile_continuous_steps
+                        else curr_step_profile
+                    )
+                    prev_step_profile = curr_step_profile
+                    curr_step_profile = next_step_profile
 
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
@@ -586,45 +626,45 @@ class RayDALUTrainer(RayPPOTrainer):
                     # Get unique prompt_ids from the current batch
                     batch_prompt_ids = batch.non_tensor_batch["prompt_id"]
                     unique_prompt_ids = np.unique(batch_prompt_ids)
-                    
+
                     # Filter dataframe to only include prompts from current batch
                     batch_df = self.train_dataset.dataframe[self.train_dataset.dataframe['prompt_id'].isin(unique_prompt_ids)]
-                    
+
                     if len(batch_df) > 0:
                         metrics.update({
-                            "train/per_prompt_pass_rate_avg": batch_df["prev_pass_rate"].mean(),
-                            "train/per_prompt_pass_rate_std": batch_df["prev_pass_rate"].std(),
-                            "train/per_prompt_pass_rate_min": batch_df["prev_pass_rate"].min(),
-                            "train/per_prompt_pass_rate_max": batch_df["prev_pass_rate"].max(),
-                            "train/num_unique_prompts": len(unique_prompt_ids),
-                            "train/per_prompt_length_budget_avg": batch_df["per_prompt_length_budget"].mean(),
-                            "train/per_prompt_length_budget_std": batch_df["per_prompt_length_budget"].std(),
-                            "train/per_prompt_length_budget_min": batch_df["per_prompt_length_budget"].min(),
-                            "train/per_prompt_length_budget_max": batch_df["per_prompt_length_budget"].max(),
-                            "train/prev_passed_max_length_avg": batch_df["prev_passed_max_length"].mean(),
-                            "train/prev_passed_max_length_std": batch_df["prev_passed_max_length"].std(),
-                            "train/prev_passed_max_length_min": batch_df["prev_passed_max_length"].min(),
-                            "train/prev_passed_max_length_max": batch_df["prev_passed_max_length"].max(),
-                            "train/prev_passed_avg_length_avg": batch_df["prev_passed_avg_length"].mean(),
-                            "train/prev_passed_avg_length_std": batch_df["prev_passed_avg_length"].std(),
-                            "train/prev_passed_avg_length_min": batch_df["prev_passed_avg_length"].min(),
-                            "train/prev_passed_avg_length_max": batch_df["prev_passed_avg_length"].max(),
-                            'train/prev_passed_80th_length_avg': batch_df["prev_passed_80th_length"].mean(),
-                            'train/prev_passed_80th_length_std': batch_df["prev_passed_80th_length"].std(),
-                            'train/prev_passed_80th_length_min': batch_df["prev_passed_80th_length"].min(),
-                            'train/prev_passed_80th_length_max': batch_df["prev_passed_80th_length"].max(),
-                            'train/prev_passed_50th_length_avg': batch_df["prev_passed_50th_length"].mean(),
-                            'train/prev_passed_50th_length_std': batch_df["prev_passed_50th_length"].std(),
-                            'train/prev_passed_50th_length_min': batch_df["prev_passed_50th_length"].min(),
-                            'train/prev_passed_50th_length_max': batch_df["prev_passed_50th_length"].max()
+                            "dalu_curr/num_unique_prompts": len(unique_prompt_ids),
+                            "dalu_curr/per_prompt_len_budget_avg": batch_df["per_prompt_length_budget"].mean(),
+                            "dalu_curr/per_prompt_len_budget_std": batch_df["per_prompt_length_budget"].std(),
+                            "dalu_curr/per_prompt_len_budget_min": batch_df["per_prompt_length_budget"].min(),
+                            "dalu_curr/per_prompt_len_budget_max": batch_df["per_prompt_length_budget"].max(),
+                            "dalu_prev/per_prompt_pr_avg": batch_df["prev_pass_rate"].mean(),
+                            "dalu_prev/per_prompt_pr_std": batch_df["prev_pass_rate"].std(),
+                            "dalu_prev/per_prompt_pr_min": batch_df["prev_pass_rate"].min(),
+                            "dalu_prev/per_prompt_pr_max": batch_df["prev_pass_rate"].max(),
+                            "dalu_prev/passed_max_len_avg": batch_df["prev_passed_max_length"].mean(),
+                            "dalu_prev/passed_max_len_std": batch_df["prev_passed_max_length"].std(),
+                            "dalu_prev/passed_max_len_min": batch_df["prev_passed_max_length"].min(),
+                            "dalu_prev/passed_max_len_max": batch_df["prev_passed_max_length"].max(),
+                            "dalu_prev/passed_avg_len_avg": batch_df["prev_passed_avg_length"].mean(),
+                            "dalu_prev/passed_avg_len_std": batch_df["prev_passed_avg_length"].std(),
+                            "dalu_prev/passed_avg_len_min": batch_df["prev_passed_avg_length"].min(),
+                            "dalu_prev/passed_avg_len_max": batch_df["prev_passed_avg_length"].max(),
+                            'dalu_prev/passed_80th_len_avg': batch_df["prev_passed_80th_length"].mean(),
+                            'dalu_prev/passed_80th_len_std': batch_df["prev_passed_80th_length"].std(),
+                            'dalu_prev/passed_80th_len_min': batch_df["prev_passed_80th_length"].min(),
+                            'dalu_prev/passed_80th_len_max': batch_df["prev_passed_80th_length"].max(),
+                            'dalu_prev/passed_50th_len_avg': batch_df["prev_passed_50th_length"].mean(),
+                            'dalu_prev/passed_50th_len_std': batch_df["prev_passed_50th_length"].std(),
+                            'dalu_prev/passed_50th_len_min': batch_df["prev_passed_50th_length"].min(),
+                            'dalu_prev/passed_50th_len_max': batch_df["prev_passed_50th_length"].max()
                         })
 
-                metrics["train/num_gen_batches"] = num_gen_batches
-                metrics['train/num_prompts'] = len(train_dataset.dataframe)
-                metrics['train/perct_dropped_prompts'] = 100 * ( (len(self.train_dataset.dataframe) - len(train_dataset.dataframe)) / len(self.train_dataset.dataframe))
-                metrics['train/n_drop_easy'] = self.n_drop_easy if self.n_drop_easy is not None else 0
-                metrics['train/n_drop_hard'] = self.n_drop_hard if self.n_drop_hard is not None else 0
-                metrics['train/epoch'] = epoch
+                metrics["dalu_epoch/num_gen_batches"] = num_gen_batches
+                metrics['dalu_epoch/num_prompts'] = len(train_dataset.dataframe)
+                metrics['dalu_epoch/perct_dropped_prompts'] = 100 * ( (len(self.train_dataset.dataframe) - len(train_dataset.dataframe)) / len(self.train_dataset.dataframe))
+                metrics['dalu_epoch/n_drop_easy'] = self.n_drop_easy if self.n_drop_easy is not None else 0
+                metrics['dalu_epoch/n_drop_hard'] = self.n_drop_hard if self.n_drop_hard is not None else 0
+                metrics['dalu_epoch/epoch'] = epoch
                 batch = None
                 num_prompt_in_batch = 0
                 num_gen_batches = 0
@@ -639,6 +679,17 @@ class RayDALUTrainer(RayPPOTrainer):
 
                 progress_bar.update(1)
                 self.global_steps += 1
+                self.gen_steps += 1
+
+        # check if last step checkpint exists
+        checkpoint_dir = os.path.join(self.config.trainer.default_local_dir, f"global_step_{self.global_steps}")
+        if not os.path.exists(checkpoint_dir):
+            # save last step checkpoint
+            timing_raw = defaultdict(float)
+            with marked_timer("save_checkpoint", timing_raw, "green"):
+                self._save_checkpoint()
+            metrics = {f"timing/{k}": v for k, v in timing_raw.items()}
+            logger.log(data=metrics, step=self.global_steps)
 
     def _save_dataset_state(self, local_global_step_folder):
         """
@@ -647,16 +698,16 @@ class RayDALUTrainer(RayPPOTrainer):
         """
         if not self.config.trainer.get('enable_budget', False):
             return
-            
+
         dataset_state_path = os.path.join(local_global_step_folder, 'dataset_state.pt')
-        
+
         # Save the current dataset state
         dataset_state = {
             'dataframe': self.train_dataset.dataframe.copy(),
             'n_drop_easy': getattr(self, 'n_drop_easy', 0),
             'n_drop_hard': getattr(self, 'n_drop_hard', 0),
         }
-        
+
         torch.save(dataset_state, dataset_state_path)
         print(f"Saved dataset state to {dataset_state_path}")
         print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
@@ -671,18 +722,18 @@ class RayDALUTrainer(RayPPOTrainer):
         """
         if not self.config.trainer.get('enable_budget', False):
             return
-            
+
         dataset_state_path = os.path.join(global_step_folder, 'dataset_state.pt')
-        
+
         if os.path.exists(dataset_state_path):
             print(f"Loading dataset state from {dataset_state_path}")
             dataset_state = torch.load(dataset_state_path, weights_only=False)
-            
+
             # Restore dataset with updated pass rates and lengths
             self.train_dataset.dataframe = dataset_state['dataframe']
-            self.n_drop_easy = dataset_state.get('n_drop_easy', 0) 
+            self.n_drop_easy = dataset_state.get('n_drop_easy', 0)
             self.n_drop_hard = dataset_state.get('n_drop_hard', 0)
-            
+
             print(f"Restored dataset state:")
             print(f"  - Dataset size: {len(self.train_dataset.dataframe)}")
             print(f"  - Pass rate range: {self.train_dataset.dataframe['prev_pass_rate'].min():.3f} - {self.train_dataset.dataframe['prev_pass_rate'].max():.3f}")
@@ -701,7 +752,7 @@ class RayDALUTrainer(RayPPOTrainer):
         """
         # Call parent method to save models and dataloader
         super()._save_checkpoint()
-        
+
         # Save additional dataset state for enable_budget
         local_global_step_folder = os.path.join(self.config.trainer.default_local_dir, f"global_step_{self.global_steps}")
         self._save_dataset_state(local_global_step_folder)
@@ -712,22 +763,22 @@ class RayDALUTrainer(RayPPOTrainer):
         """
         # Store original global_steps to detect if we loaded from checkpoint
         original_global_steps = self.global_steps
-        
+
         # Call parent method to load models and dataloader
         result = super()._load_checkpoint()
-        
+
         # If global_steps changed, we loaded from checkpoint
         if self.global_steps > original_global_steps:
             checkpoint_folder = self.config.trainer.default_local_dir
             if not os.path.isabs(checkpoint_folder):
                 working_dir = os.getcwd()
                 checkpoint_folder = os.path.join(working_dir, checkpoint_folder)
-            
+
             # Find the same checkpoint folder that was loaded
             from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
             global_step_folder = find_latest_ckpt_path(checkpoint_folder)
-            
+
             if global_step_folder is not None:
                 self._load_dataset_state(global_step_folder)
-        
+
         return result

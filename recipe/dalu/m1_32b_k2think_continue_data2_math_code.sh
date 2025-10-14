@@ -13,8 +13,8 @@
 
 
 # =================== Frequently Used Variables ===================
-RESUME_CKPT_DIR_NAME="/lustrefs/users/haonan.li/Reasoning360/checkpoints/DALU/363947-rl-32b-k2think-continue-data5_2-K2-Think"  # Fill in the checkpoint directory name to resume from, otherwise from scratch
-WANDB_ID="lyl3mkni"
+RESUME_CKPT_DIR_NAME=""
+WANDB_ID=""
 export STEM_LLM_JUDGE_URL="http://azure-uk-hpc-H200-instance-320:8000"  # Fill in the llm-as-judge hosted URL, currently used only in 'STEM' domain
 
 # =================== Cluster Environment ===================
@@ -143,7 +143,7 @@ test_files="['${aime25_test_path}', '${amc_test_path}', '${aime_test_path}', '${
 
 # =================== Model ===================
 BASE_MODEL=LLM360/K2-Think
-CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/Reasoning360/bin/
+CONDA_BIN_PATH=/lustrefs/users/haonan.li/miniconda3/envs/verl-0.5/bin/
 
 # =================== Logging ===================
 WANDB_PROJECT=DALU
@@ -272,12 +272,16 @@ offload=True
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
+    actor_rollout_ref.actor.fsdp_config.forward_prefetch=True \
+    actor_rollout_ref.actor.entropy_checkpointing=True \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
     actor_rollout_ref.ref.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
+    actor_rollout_ref.ref.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.nccl_timeout=${NCCL_TIMEOUT} \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
@@ -287,6 +291,9 @@ offload=True
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=${infer_ppo_max_token_len} \
     actor_rollout_ref.rollout.max_num_seqs=${gen_max_num_seqs} \
+    actor_rollout_ref.rollout.disable_log_stats=False \
+    actor_rollout_ref.rollout.enforce_eager=False \
+    actor_rollout_ref.rollout.enable_prefix_caching=True \
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
@@ -303,6 +310,7 @@ offload=True
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.enable_activation_offload=True \
     reward_model.reward_manager=async_multi_process \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
