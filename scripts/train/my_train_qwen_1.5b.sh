@@ -54,12 +54,6 @@ export VLLM_USE_V1=0
 export RAY_TMPDIR=/data1/ray_tmp
 mkdir -p "$RAY_TMPDIR"
 
-# Persist console logs to file (stdout & stderr)
-LOG_DIR=/data1/Reasoning360_logs
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/train_$(date +%Y%m%d_%H%M%S).log"
-exec > >(tee -a "$LOG_FILE") 2>&1
-
 # Choose a larger local directory for checkpoints to avoid write failures
 CHECKPOINT_DIR=/data1/Reasoning360_checkpoints
 mkdir -p "$CHECKPOINT_DIR"
@@ -129,7 +123,7 @@ train_files="['${math_train_path}']"  # 以 math 为例，你可以按需添加�
 test_files="['${math_test_path}']"  # 以 math 为例，你可以按需添加更多任务
 
 # =================== Model ===================
-BASE_MODEL=/home/hmpiao/hmpiao/Qwen2.5-1.5B-Base
+BASE_MODEL=/home/hmpiao/hmpiao/Qwen3-1.7B-Base
 # BASE_MODEL=/home/hmpiao/hmpiao/Qwen3-1.7B-Base-think-qwen2chat-sftjudge-ke-2/Qwen3-1.7B-Base-think-qwen2chat-sftjudge-ke-2  # Note: This is the original Qwen32B-Base model. In training, we add 'think' system prompt to it (see README).
 
 # =================== Logging ===================
