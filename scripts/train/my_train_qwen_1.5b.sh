@@ -272,6 +272,7 @@ python -m recipe.dapo.main_dapo \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.model.path=$BASE_MODEL \
+    actor_rollout_ref.model.torch_dtype=bfloat16 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.rollout.multi_turn.enable=False \
     actor_rollout_ref.rollout.mode="sync" \
