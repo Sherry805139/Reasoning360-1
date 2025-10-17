@@ -42,7 +42,7 @@ echo "Nodes to check: ${nodes[@]}"
 declare -A pids
 export head_node=${nodes[0]}
 #head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
-# head_node_ip="127.0.0.1"
+head_node_ip="127.0.0.1"
 port=6379
 address_head=$head_node_ip:$port
 
