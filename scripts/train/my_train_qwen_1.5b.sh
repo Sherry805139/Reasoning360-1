@@ -248,11 +248,13 @@ python -m recipe.dapo.main_dapo \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
+    actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
     actor_rollout_ref.ref.log_prob_micro_batch_size=${infer_micro_batch_size} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
+    actor_rollout_ref.ref.use_torch_compile=False \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
