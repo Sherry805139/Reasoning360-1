@@ -13,7 +13,7 @@
 #SBATCH --time=720:00:00
 SLURM_NNODES=1
 SLURM_CPUS_PER_TASK=96
-# NUM_GPUS=4
+NUM_GPUS=4
 
 # =================== Frequently Used Variables ===================
 RESUME_CKPT_DIR_NAME=""  # Fill in the checkpoint directory name to resume from, otherwise from scratch
