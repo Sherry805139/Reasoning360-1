@@ -281,8 +281,8 @@ python -m recipe.dapo.main_dapo \
     +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     +actor_rollout_ref.model.override_config.torch_dtype=bfloat16 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    actor_rollout_ref.actor.use_torch_compile=True \
-    actor_rollout_ref.ref.use_torch_compile=True \
+    actor_rollout_ref.actor.use_torch_compile=False \
+    actor_rollout_ref.ref.use_torch_compile=False \
     reward_model.reward_manager=batch \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
