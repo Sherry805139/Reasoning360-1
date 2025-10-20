@@ -278,8 +278,6 @@ python -m recipe.dapo.main_dapo \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
-    +actor_rollout_ref.model.override_config.torch_dtype=bfloat16 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.ref.use_torch_compile=False \
