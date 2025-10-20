@@ -49,6 +49,7 @@ address_head=$head_node_ip:$port
 export worker_num=$SLURM_NNODES
 export HYDRA_FULL_ERROR=1
 export VLLM_USE_V1=0
+export TRANSFORMERS_NO_FLASH_ATTENTION=1
 
 # Redirect Ray temporary directory to a larger disk to avoid /tmp exhaustion
 export RAY_TMPDIR=/data1/ray_tmp
@@ -204,7 +205,8 @@ train_micro_batch_size=null
 use_dynamic_bsz=True
 actor_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward & backward but note memory overflow
 infer_ppo_max_token_len=$(( (max_prompt_length + max_response_length) * 2))  # increase this to speed up model forward, but note memory overflow
-offload=True
+offload=False
+
 
 # =================== Start RL training ===================
 # Ensure your python environment (e.g., conda) is activated before running this script.
@@ -278,6 +280,8 @@ python -m recipe.dapo.main_dapo \
     +actor_rollout_ref.model.override_config.attention_dropout=0. \
     +actor_rollout_ref.model.override_config.embd_pdrop=0. \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
+    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.torch_dtype=bfloat16 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.ref.use_torch_compile=False \
