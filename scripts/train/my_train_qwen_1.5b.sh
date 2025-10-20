@@ -115,7 +115,7 @@ test_files="['${math_test_path}','${aime_test_path}']"  # Use math as example, a
 
 
 # =================== Model ===================
-BASE_MODEL=/home/hmpiao/hmpiao/Qwen3-1.7B-Base
+BASE_MODEL=/home/hmpiao/hmpiao/Qwen2.5-1.5B-Base
 
 # =================== Logging ===================
 WANDB_PROJECT=Reasoning360-1.7B
